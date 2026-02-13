@@ -1,36 +1,80 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Elloi Kasa Webapp
 
-## Getting Started
+Kasiyer Sipariş Ekranı + Gün Sonu Raporu + Admin Portal içeren Next.js uygulaması.
 
-First, run the development server:
+## Teknoloji
+
+- Next.js App Router + TypeScript
+- Tailwind CSS
+- Prisma Client + SQLite (adapter ile)
+- Zod doğrulama
+- Cookie tabanlı session auth (rol: CASHIER / ADMIN)
+
+## Hızlı Kurulum
+
+1. Bağımlılıkları kur:
+
+```bash
+npm install
+```
+
+2. Ortam değişkenlerini ayarla:
+
+```bash
+cp .env.example .env
+```
+
+3. Veritabanı şemasını oluştur:
+
+```bash
+npm run db:migrate
+```
+
+4. Örnek veriyi yükle:
+
+```bash
+npm run db:seed
+```
+
+5. Uygulamayı başlat:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Demo Hesapları
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- Admin: `admin` / `113521`
+- Admin: `deniz` / `123689`
+- Kasiyer: `ecrin` / `1024`
+- Kasiyer: `nurseli` / `9854`
+- Kasiyer: `enes` / `1905`
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Route'lar
 
-## Learn More
+- `/login`
+- `/`
+- `/order/new`
+- `/reports/day`
+- `/admin/products`
+- `/admin/reports`
+- `/admin/users`
 
-To learn more about Next.js, take a look at the following resources:
+## Veritabanı Notları
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- `createdAt`, `deliveredAt`, `canceledAt` UTC saklanır.
+- UI tarafında tarih/saat gösterimleri uygulamanın çalıştığı cihazın zaman dilimine göre hesaplanır.
+- Sipariş satırlarında `productNameSnapshot` ve `unitPriceSnapshot` tutulur.
+- Stok, sipariş `Kaydet` anında düşer; iptalde geri eklenir.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Komutlar
 
-## Deploy on Vercel
+- `npm run db:migrate`: SQLite şemasını kurar + Prisma client üretir
+- `npm run db:reset`: `prisma/dev.db` siler, şemayı yeniden kurar
+- `npm run db:seed`: örnek kullanıcı/ürün verisi yükler
+- `npm run lint`
+- `npm run build`
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Önemli Not
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Bu ortamda Prisma schema engine migration akışı stabil çalışmadığı için şema kurulumu `sqlite3` ile idempotent SQL bootstrap (`prisma/init.sql`) üzerinden yapılır. Uygulama katmanı Prisma Client ile devam eder.

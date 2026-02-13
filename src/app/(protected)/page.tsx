@@ -1,0 +1,179 @@
+import Link from "next/link";
+import { OrderStatus } from "@prisma/client";
+
+import { cancelOrderAction, deliverOrderAction } from "@/app/actions/orders";
+import { PAYMENT_METHOD_LABELS } from "@/lib/constants";
+import { prisma } from "@/lib/db";
+import { formatCurrencyTRY, formatDateTimeTR, formatTimeTR } from "@/lib/format";
+import { listOpenOrders } from "@/lib/orders";
+import { getDayRangeUtc, getTodayTR } from "@/lib/time";
+
+export default async function DashboardPage() {
+  const today = getTodayTR();
+  const { startUtc, endUtc } = getDayRangeUtc(today);
+  const dayClosure = await prisma.dayClosure.findUnique({
+    where: { day: today },
+    select: { id: true },
+  });
+  const isDayClosed = Boolean(dayClosure);
+  const openOrders = await listOpenOrders();
+  const pastOrders = await prisma.order.findMany({
+    where: {
+      createdAt: {
+        gte: startUtc,
+        lte: endUtc,
+      },
+      status: {
+        in: [OrderStatus.DELIVERED, OrderStatus.CANCELED],
+      },
+    },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      orderNo: true,
+      status: true,
+      paymentMethod: true,
+      totalAmount: true,
+      createdAt: true,
+      deliveredAt: true,
+      canceledAt: true,
+      createdBy: {
+        select: {
+          username: true,
+        },
+      },
+    },
+  });
+
+  return (
+    <div className="space-y-5">
+      <section className="grid gap-5 xl:grid-cols-[360px_1fr]">
+        <div className="panel p-5 sm:p-6">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Tarih - Saat</p>
+          <p className="mt-3 text-2xl font-semibold">{formatDateTimeTR(new Date())}</p>
+          {isDayClosed ? (
+            <>
+              <button
+                type="button"
+                disabled
+                className="mt-5 flex h-14 w-full items-center justify-center rounded-2xl bg-slate-300 text-base font-semibold text-slate-600"
+              >
+                + Yeni Sipariş
+              </button>
+              <p className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700">
+                Gün sonlandı, daha fazla sipariş alamazsınız.
+              </p>
+            </>
+          ) : (
+            <Link
+              href="/order/new"
+              className="mt-5 flex h-14 w-full items-center justify-center rounded-2xl bg-[var(--primary)] text-base font-semibold text-white transition hover:bg-[var(--primary-hover)]"
+            >
+              + Yeni Sipariş
+            </Link>
+          )}
+        </div>
+
+        <div className="panel overflow-hidden">
+          <header className="border-b border-slate-200 px-4 py-3">
+            <h2 className="font-semibold">Açık Siparişler</h2>
+          </header>
+
+          {openOrders.length === 0 ? (
+            <p className="muted p-4 text-sm">Açık sipariş yok. Yeni sipariş oluşturarak başlayın.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="bg-slate-50 text-left text-slate-600">
+                  <tr>
+                    <th className="px-4 py-3 font-medium">Sipariş No</th>
+                    <th className="px-4 py-3 font-medium">Saat</th>
+                    <th className="px-4 py-3 font-medium">Kasiyer</th>
+                    <th className="px-4 py-3 font-medium">Ödeme</th>
+                    <th className="px-4 py-3 font-medium">Toplam</th>
+                    <th className="px-4 py-3 font-medium">İşlem</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {openOrders.map((order) => (
+                    <tr key={order.id} className="border-t border-slate-100">
+                      <td className="px-4 py-3 font-semibold">{order.orderNo}</td>
+                      <td className="px-4 py-3">{formatTimeTR(order.createdAt)}</td>
+                      <td className="px-4 py-3">{order.createdBy.username}</td>
+                      <td className="px-4 py-3">{PAYMENT_METHOD_LABELS[order.paymentMethod]}</td>
+                      <td className="px-4 py-3 font-medium">{formatCurrencyTRY(order.totalAmount)}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex gap-2">
+                          <form action={deliverOrderAction.bind(null, order.id)}>
+                            <button
+                              type="submit"
+                              className="h-9 rounded-lg bg-[var(--primary)] px-3 text-xs font-semibold text-white"
+                            >
+                              Teslim Et
+                            </button>
+                          </form>
+                          <form action={cancelOrderAction.bind(null, order.id)}>
+                            <button
+                              type="submit"
+                              className="h-9 rounded-lg border border-red-300 px-3 text-xs font-semibold text-red-700"
+                            >
+                              İptal
+                            </button>
+                          </form>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section className="panel overflow-hidden">
+        <header className="border-b border-slate-200 px-4 py-3">
+          <h2 className="font-semibold">Günün Geçmiş Siparişleri</h2>
+        </header>
+        {pastOrders.length === 0 ? (
+          <p className="muted p-4 text-sm">Bugün tamamlanan veya iptal edilen sipariş yok.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead className="bg-slate-50 text-left text-slate-600">
+                <tr>
+                  <th className="px-4 py-3 font-medium">Sipariş No</th>
+                  <th className="px-4 py-3 font-medium">Durum</th>
+                  <th className="px-4 py-3 font-medium">Saat</th>
+                  <th className="px-4 py-3 font-medium">Kasiyer</th>
+                  <th className="px-4 py-3 font-medium">Ödeme</th>
+                  <th className="px-4 py-3 font-medium">Toplam</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pastOrders.map((order) => {
+                  const statusLabel = order.status === OrderStatus.DELIVERED ? "Teslim" : "İptal";
+                  const actionTime = order.status === OrderStatus.DELIVERED ? order.deliveredAt : order.canceledAt;
+
+                  return (
+                    <tr key={order.id} className="border-t border-slate-100">
+                      <td className="px-4 py-3 font-semibold">{order.orderNo}</td>
+                      <td className="px-4 py-3">{statusLabel}</td>
+                      <td className="px-4 py-3">{formatTimeTR(actionTime ?? order.createdAt)}</td>
+                      <td className="px-4 py-3">{order.createdBy.username}</td>
+                      <td className="px-4 py-3">{PAYMENT_METHOD_LABELS[order.paymentMethod]}</td>
+                      <td className="px-4 py-3 font-medium">{formatCurrencyTRY(order.totalAmount)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <footer className="border-t border-slate-100 px-4 py-3 text-xs text-slate-500">
+          Güncelleme zamanı: {formatDateTimeTR(new Date())}
+        </footer>
+      </section>
+    </div>
+  );
+}

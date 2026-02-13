@@ -1,0 +1,139 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+enum UserRole {
+  CASHIER
+  ADMIN
+}
+
+enum OrderStatus {
+  OPEN
+  DELIVERED
+  CANCELED
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  METROPOL
+  EDENRED
+}
+
+enum ProductCategory {
+  FOOD
+  DRINK
+  EXTRAS
+}
+
+enum StockMovementType {
+  SALE
+  ADJUSTMENT
+  RESTOCK
+  CANCEL_REVERT
+}
+
+model User {
+  id           String          @id @default(uuid())
+  username     String          @unique
+  passwordHash String
+  role         UserRole
+  isActive     Boolean         @default(true)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  orders       Order[]
+  movements    StockMovement[]
+  dayClosures  DayClosure[]
+}
+
+model Product {
+  id             String          @id @default(uuid())
+  name           String
+  category       ProductCategory @default(FOOD)
+  subCategory    String?
+  basePrice      Decimal         @default(0)
+  stockQty       Int             @default(0)
+  trackStock     Boolean         @default(true)
+  isActive       Boolean         @default(true)
+  softDeletedAt  DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  orderItems     OrderItem[]
+  stockMovements StockMovement[]
+
+  @@index([isActive])
+}
+
+model Order {
+  id            String        @id @default(uuid())
+  orderNo       String        @unique
+  status        OrderStatus   @default(OPEN)
+  paymentMethod PaymentMethod
+  totalAmount   Decimal       @default(0)
+  note          String?
+  createdAt     DateTime      @default(now())
+  deliveredAt   DateTime?
+  canceledAt    DateTime?
+  createdById   String
+  createdBy     User          @relation(fields: [createdById], references: [id])
+  items         OrderItem[]
+  movements     StockMovement[]
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model OrderItem {
+  id                  String   @id @default(uuid())
+  orderId             String
+  productId           String
+  productNameSnapshot String
+  unitPriceSnapshot   Decimal
+  qty                 Int      @default(1)
+  modifierText        String?
+  lineTotal           Decimal
+  createdAt           DateTime @default(now())
+  order               Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product             Product  @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+model StockMovement {
+  id          String            @id @default(uuid())
+  productId   String
+  type        StockMovementType
+  qtyDelta    Int
+  reason      String?
+  orderId     String?
+  createdById String?
+  createdAt   DateTime          @default(now())
+  product     Product           @relation(fields: [productId], references: [id])
+  order       Order?            @relation(fields: [orderId], references: [id])
+  createdBy   User?             @relation(fields: [createdById], references: [id])
+
+  @@index([productId])
+  @@index([orderId])
+  @@index([createdAt])
+}
+
+model DayClosure {
+  id            String   @id @default(uuid())
+  day           String   @unique
+  zReportTotal  Decimal
+  systemTotal   Decimal
+  difference    Decimal
+  hasMismatch   Boolean
+  totalOrders   Int
+  totalItems    Int
+  createdAt     DateTime @default(now())
+  createdById   String
+  createdBy     User     @relation(fields: [createdById], references: [id])
+
+  @@index([createdAt])
+}

@@ -1,0 +1,48 @@
+2026-02-13
+- Next.js + TypeScript + Tailwind proje iskeleti kuruldu.
+- Prisma veri modeli Product/Order/OrderItem/StockMovement/User ile oluşturuldu.
+- Session cookie tabanlı auth (username + PIN/şifre, role-based access) eklendi.
+- Kasiyer akışı tamamlandı: dashboard, yeni sipariş, sipariş kaydet, teslim et, iptal et.
+- Sipariş anında stok düşümü, iptalde stok iadesi, negatif stok engeli transaction içinde uygulandı.
+- Gün sonu raporu (KPI, ödeme kırılımı, ürün kırılımı, sipariş detay expand) eklendi.
+- CSV export endpoint eklendi: /api/reports/day.csv
+- Admin portal tamamlandı: ürün/fiyat/stok/aktiflik yönetimi, raporlar, kullanıcı yönetimi.
+- Seed verisi eklendi (12 ürün + admin/kasiyer kullanıcı).
+- Build ve lint başarıyla geçti.
+- Admin ürün yönetim tablosunda mevcut ürün adı düzenleme eklendi; satırdaki ad/fiyat/aktiflik/stok değişimleri tek `Kaydet` butonuna bağlandı.
+- Admin ürün yönetiminde mevcut ürünler için stok takibi satır bazında aç/kapat düzenlenebilir hale getirildi ve yine sadece `Kaydet` ile kalıcılaştırıldı.
+- Admin ürün tablosunda durum kolonu sadeleştirildi: checkbox kaldırıldı, tıklanabilir durum butonu (Aktif/Pasif) eklendi.
+- Durum butonu davranışı düzeltildi: ürün aktifken yeşil `Aktif`, tıklayınca kırmızı `Pasif` görünür hale getirildi.
+- Ürün modeline kategori (`FOOD`/`DRINK`) eklendi; admin ürün tablosunda isim altındaki metin kaldırılıp kategori seçimi getirildi.
+- Sipariş ekranında kategoriye göre özelleştirme akışı eklendi: içecek için 5 alan (mekanda/takeaway, sıcak/soğuk, süt tipi, krema, ekstralar), yiyecek için servis tipi (sıcak/soğuk).
+- Admin ürün satırındaki `Kaydet` action'ında yakalanmayan server exception akışı düzeltildi; validation/DB hataları artık uygulamayı düşürmeden action içinde loglanıyor.
+- Admin ürün tablosunda satır düzenleme yapıldığında tablo üstünde `Kaydedilmemiş değişiklikler var.` ibaresi eklendi.
+- Yeni ürün formunda `Stok Takip Et` kapalıyken `Başlangıç Stok` girişi kilitli hale getirildi.
+- Admin ürün tablosunda fiyat düzenleme alanı iki parçaya bölündü: ana ücret + küsürat; `Kaydet` sırasında tek `basePrice` değeri olarak birleştiriliyor.
+- Sabit `Europe/Istanbul` kullanımı kaldırıldı; tarih/saat işlemleri uygulamanın çalıştığı cihazın zaman dilimi ile hesaplanacak şekilde güncellendi.
+- Admin ürün tablosunda satır başı `Kaydet` butonları kaldırıldı; tüm değişiklikler için tek bir büyük `Tüm Değişiklikleri Kaydet` butonu eklendi.
+- Durum kolonu görsel hizası düzeltildi; `Aktif/Pasif` butonu satır içinde ortalandı.
+- Gün sonu akışı genişletildi: `Günü Sonlandır` formu eklendi, `Z Raporu Toplamı` girilmeden işlem tamamlanamaz hale getirildi.
+- Gün sonlandırma tamamlandığında `DayClosure` kaydı oluşturuluyor, fark analizi (ciro - Z toplamı) hesaplanıyor, mismatch durumunda `gün sonu rakamları tutmuyor` uyarısı rapora ekleniyor.
+- Gün sonlandırma raporu için yeni sayfa ve export seçenekleri eklendi: PDF kaydet (yazdır) ve CSV indir (`/api/reports/day-close.csv`).
+- Gün sonu tamamlandığında local log dosyasına (`logs/day-close.log`) otomatik kayıt atılıyor.
+- Gün sonlandırılan gün için yeni sipariş açılması engellendi.
+- Prisma client cache kaynaklı `dayClosure` delegate hatası düzeltildi; gün sonu sayfası tekrar açılabilir hale geldi.
+- Gün sonu aksiyonu popup tabanlı hale getirildi: tek büyük `Günü Sonlandır` butonu ile modal açılıyor, modalde `Günlük Ciro` gösterilip zorunlu `Z Raporu Toplamı` ile `Raporu Oluştur` tamamlanıyor.
+- Kapanış raporuna ek metadata alanları eklendi: raporu oluşturanın adı, raporun oluşturulma tarihi, raporun oluşturulma saati.
+- Gün sonlandırılmış günlerde kasa ekranında `+ Yeni Sipariş` butonu inaktif gösteriliyor ve kullanıcıya `Gün sonlandı, daha fazla sipariş alamazsınız.` mesajı veriliyor.
+- Gün sonlandırılmış günlerde `/order/new` rotası da engellenerek aynı mesajla kasaya dönüş aksiyonu sunuluyor.
+- Sadece admin kullanıcılar için `Gün Sonu Raporunu Sıfırla` aksiyonu eklendi; kapanış kaydı silinip aynı güne yeniden kapanış alınabilir hale getirildi.
+- Gün sonu sıfırlama aksiyonunda ilgili closure kaydıyla eşleşen `logs/day-close.log` satırları da temizleniyor.
+- Kullanıcı seti güncellendi: admin (`admin/113521`, `deniz/123689`) ve kasiyer (`ecrin/1024`, `nurseli/9854`, `enes/1905`) aktif hale getirildi; listede olmayan kullanıcılar pasife çekildi.
+- Sipariş detayında kasiyer bilgisi tamamlandı: kasa açık siparişler tablosuna `Kasiyer` kolonu eklendi, rapor CSV sipariş detayına `cashier` alanı eklendi.
+- Gün sonu sayfasında `Günün Özeti - (tarih)` başlığı eklendi ve sipariş detayına `Sil` aksiyonu getirildi; silme öncesi zorunlu `emin misin` onayı eklendi.
+- Üst menü güncellendi: `Kasa` -> `Ana Sayfa` (ev ikonu), `Gün Sonu` -> `Özet`, `Çıkış` kırmızı + power ikonu olarak düzenlendi.
+- Ödeme yöntemleri 4 tipe güncellendi: `Kredi Kartı`, `Nakit`, `Metropol Kart`, `Ticket Edenred`; sipariş formu, rapor/CSV ve hesaplamalar bu enumla senkronlandı.
+- Ana sayfa düzeni yenilendi: üst alan iki kolona ayrıldı (sol: tarih-saat + yeni sipariş, sağ: açık siparişler), alt satıra `Günün Geçmiş Siparişleri` tablosu eklendi.
+- Ürün kategorilerine `Ekstralar` eklendi; admin ürün ekleme/düzenleme ve sipariş ekranı kategori akışı bu yeni kategoriyle uyumlu hale getirildi.
+- İçeceklerde boyut (`Küçük/Büyük`) ve bitkisel süt (badem/yulaf) ek ücretleri eklendi; fiyat hesaplaması hem UI’da canlı hem server-side sipariş kaydında doğrulanarak uygulanıyor.
+- Ürün listesi görsel menüye göre sıfırlandı: tüm mevcut ürünler önce pasife çekildi, menüdeki ürünler kategori/fiyatlarıyla yeniden aktifleştirildi (DRINK/FOOD/EXTRAS).
+- Sipariş oluşturma ekranında ürünler görsel menü düzenine göre alt kategori bloklarına ayrıldı (Sıcak/Soğuk Kahveler, Çaylar, Soft İçecekler, Sandviçler-Tuzlular, Tatlılar, Ekstralar).
+- Admin ürün yönetimine düzenlenebilir `Alt Kategori` alanı eklendi; sipariş ekranı ürün gruplaması artık bu alandan okunuyor ve gerekirse isim bazlı fallback ile korunuyor.
+- Yeni sipariş ekranı alt kategori accordion yapısına geçirildi: önce alt kategori seçiliyor, kategori adına tıklanınca ürün listesi aşağı açılıyor (uzun liste sadeleştirildi).
