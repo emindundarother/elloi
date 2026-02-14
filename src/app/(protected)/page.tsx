@@ -8,6 +8,7 @@ import { prisma } from "@/lib/db";
 import { formatCurrencyTRY, formatDateTimeTR, formatTimeTR } from "@/lib/format";
 import { listOpenOrders } from "@/lib/orders";
 import { getDayRangeUtc, getTodayTR } from "@/lib/time";
+import { LiveClock } from "@/components/live-clock";
 
 export default async function DashboardPage() {
   const session = await requireSession();
@@ -52,7 +53,7 @@ export default async function DashboardPage() {
       <section className="grid gap-5 xl:grid-cols-[360px_1fr]">
         <div className="panel p-5 sm:p-6">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Tarih - Saat</p>
-          <p className="mt-3 text-2xl font-semibold">{formatDateTimeTR(new Date())}</p>
+          <p className="mt-3 text-2xl font-semibold"><LiveClock /></p>
           {isDayClosed ? (
             <>
               <button
