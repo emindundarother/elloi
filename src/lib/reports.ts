@@ -19,6 +19,7 @@ export type ReportOrder = {
   orderNo: string;
   status: OrderStatus;
   paymentMethod: PaymentMethod;
+  createdById: string;
   createdByUsername: string;
   totalAmount: number;
   createdAt: Date;
@@ -115,6 +116,7 @@ export async function getReportByRange(startDay?: string | null, endDay?: string
       orderNo: order.orderNo,
       status: order.status,
       paymentMethod: order.paymentMethod,
+      createdById: order.createdById,
       createdByUsername: order.createdBy.username,
       totalAmount: orderTotal,
       createdAt: order.createdAt,

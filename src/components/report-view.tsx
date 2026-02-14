@@ -1,11 +1,27 @@
 import { PAYMENT_METHOD_LABELS } from "@/lib/constants";
 import { formatCurrencyTRY, formatDateTimeTR } from "@/lib/format";
-import { ReportData } from "@/lib/reports";
+import { ReportData, ReportOrder } from "@/lib/reports";
 import { cancelOrderAction } from "@/app/actions/orders";
 
 import { ConfirmSubmitButton } from "./confirm-submit-button";
 
-export function ReportView({ report, showDeleteActions = false }: { report: ReportData; showDeleteActions?: boolean }) {
+export function ReportView({
+  report,
+  showDeleteActions = false,
+  currentUserId,
+  isAdmin = false,
+}: {
+  report: ReportData;
+  showDeleteActions?: boolean;
+  currentUserId?: string;
+  isAdmin?: boolean;
+}) {
+  const canDeleteOrder = (order: ReportOrder) => {
+    if (!showDeleteActions) return false;
+    if (isAdmin) return true;
+    return Boolean(currentUserId && order.createdById === currentUserId);
+  };
+
   return (
     <div className="space-y-5">
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -86,7 +102,7 @@ export function ReportView({ report, showDeleteActions = false }: { report: Repo
                     <p className="muted text-xs">
                       Teslim: {order.deliveredAt ? formatDateTimeTR(order.deliveredAt) : "-"}
                     </p>
-                    {showDeleteActions ? (
+                    {canDeleteOrder(order) ? (
                       <form action={cancelOrderAction.bind(null, order.id)} className="mt-2">
                         <ConfirmSubmitButton
                           label="Sil"

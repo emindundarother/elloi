@@ -308,6 +308,7 @@ export async function listOpenOrders() {
       totalAmount: true,
       createdAt: true,
       note: true,
+      createdById: true,
       createdBy: {
         select: {
           username: true,

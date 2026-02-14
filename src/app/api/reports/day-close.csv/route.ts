@@ -6,8 +6,16 @@ import { prisma } from "@/lib/db";
 import { toNumber } from "@/lib/format";
 import { getReportByRange } from "@/lib/reports";
 
-function escapeCsv(value: string): string {
-  const escaped = value.replace(/"/g, '""');
+function sanitizeCsvValue(value: string): string {
+  if (/^[=+\-@\t\r\n]/.test(value)) {
+    return `'${value}`;
+  }
+  return value;
+}
+
+function escapeCsv(value: unknown): string {
+  const stringValue = sanitizeCsvValue(String(value ?? ""));
+  const escaped = stringValue.replace(/"/g, '""');
   return `"${escaped}"`;
 }
 
@@ -16,6 +24,9 @@ export async function GET(request: NextRequest) {
 
   if (!session) {
     return new Response("Yetkisiz", { status: 401 });
+  }
+  if (session.role !== "ADMIN") {
+    return new Response("Yetkisiz", { status: 403 });
   }
 
   const id = request.nextUrl.searchParams.get("id");

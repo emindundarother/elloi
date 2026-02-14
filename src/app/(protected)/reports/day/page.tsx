@@ -51,12 +51,14 @@ export default async function DayReportPage({ searchParams }: DayReportPageProps
             </button>
           </form>
 
-          <a
-            href={`/api/reports/day.csv?start=${report.startDay}&end=${report.endDay}`}
-            className="h-10 rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold leading-10"
-          >
-            CSV
-          </a>
+          {session.role === "ADMIN" ? (
+            <a
+              href={`/api/reports/day.csv?start=${report.startDay}&end=${report.endDay}`}
+              className="h-10 rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold leading-10"
+            >
+              CSV
+            </a>
+          ) : null}
           <PrintButton />
           <Link
             href="/reports/day"
@@ -86,7 +88,12 @@ export default async function DayReportPage({ searchParams }: DayReportPageProps
         <h2 className="text-lg font-semibold">Günün Özeti - {selectedDay}</h2>
       </section>
 
-      <ReportView report={report} showDeleteActions />
+      <ReportView
+        report={report}
+        showDeleteActions
+        currentUserId={session.userId}
+        isAdmin={session.role === "ADMIN"}
+      />
     </div>
   );
 }

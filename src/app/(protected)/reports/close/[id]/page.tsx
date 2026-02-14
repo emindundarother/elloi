@@ -14,7 +14,7 @@ type DayCloseReportPageProps = {
 };
 
 export default async function DayCloseReportPage({ params }: DayCloseReportPageProps) {
-  await requireSession();
+  const session = await requireSession();
   const { id } = await params;
 
   const closure = await prisma.dayClosure.findUnique({
@@ -47,12 +47,14 @@ export default async function DayCloseReportPage({ params }: DayCloseReportPageP
             </p>
           </div>
 
-          <a
-            href={`/api/reports/day-close.csv?id=${closure.id}`}
-            className="ml-auto h-10 rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold leading-10"
-          >
-            CSV Kaydet
-          </a>
+          {session.role === "ADMIN" ? (
+            <a
+              href={`/api/reports/day-close.csv?id=${closure.id}`}
+              className="ml-auto h-10 rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold leading-10"
+            >
+              CSV Kaydet
+            </a>
+          ) : null}
           <PrintButton label="PDF Kaydet" />
           <Link
             href="/reports/day"

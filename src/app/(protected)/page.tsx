@@ -2,6 +2,7 @@ import Link from "next/link";
 import { OrderStatus } from "@prisma/client";
 
 import { cancelOrderAction, deliverOrderAction } from "@/app/actions/orders";
+import { requireSession } from "@/lib/auth";
 import { PAYMENT_METHOD_LABELS } from "@/lib/constants";
 import { prisma } from "@/lib/db";
 import { formatCurrencyTRY, formatDateTimeTR, formatTimeTR } from "@/lib/format";
@@ -9,6 +10,7 @@ import { listOpenOrders } from "@/lib/orders";
 import { getDayRangeUtc, getTodayTR } from "@/lib/time";
 
 export default async function DashboardPage() {
+  const session = await requireSession();
   const today = getTodayTR();
   const { startUtc, endUtc } = getDayRangeUtc(today);
   const dayClosure = await prisma.dayClosure.findUnique({
@@ -95,35 +97,43 @@ export default async function DashboardPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {openOrders.map((order) => (
-                    <tr key={order.id} className="border-t border-slate-100">
+                  {openOrders.map((order) => {
+                    const canManage = session.role === "ADMIN" || order.createdById === session.userId;
+
+                    return (
+                      <tr key={order.id} className="border-t border-slate-100">
                       <td className="px-4 py-3 font-semibold">{order.orderNo}</td>
                       <td className="px-4 py-3">{formatTimeTR(order.createdAt)}</td>
                       <td className="px-4 py-3">{order.createdBy.username}</td>
                       <td className="px-4 py-3">{PAYMENT_METHOD_LABELS[order.paymentMethod]}</td>
                       <td className="px-4 py-3 font-medium">{formatCurrencyTRY(order.totalAmount)}</td>
                       <td className="px-4 py-3">
-                        <div className="flex gap-2">
-                          <form action={deliverOrderAction.bind(null, order.id)}>
-                            <button
-                              type="submit"
-                              className="h-9 rounded-lg bg-[var(--primary)] px-3 text-xs font-semibold text-white"
-                            >
-                              Teslim Et
-                            </button>
-                          </form>
-                          <form action={cancelOrderAction.bind(null, order.id)}>
-                            <button
-                              type="submit"
-                              className="h-9 rounded-lg border border-red-300 px-3 text-xs font-semibold text-red-700"
-                            >
-                              İptal
-                            </button>
-                          </form>
-                        </div>
+                        {canManage ? (
+                          <div className="flex gap-2">
+                            <form action={deliverOrderAction.bind(null, order.id)}>
+                              <button
+                                type="submit"
+                                className="h-9 rounded-lg bg-[var(--primary)] px-3 text-xs font-semibold text-white"
+                              >
+                                Teslim Et
+                              </button>
+                            </form>
+                            <form action={cancelOrderAction.bind(null, order.id)}>
+                              <button
+                                type="submit"
+                                className="h-9 rounded-lg border border-red-300 px-3 text-xs font-semibold text-red-700"
+                              >
+                                İptal
+                              </button>
+                            </form>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-slate-400">Yetkiniz yok</span>
+                        )}
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

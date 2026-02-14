@@ -7,6 +7,50 @@ import { PrismaClient, ProductCategory, UserRole } from "@prisma/client";
 
 import { inferProductSubCategory } from "../src/lib/product-subcategory";
 
+type SeedUserInput = { username: string; password: string; role: UserRole };
+
+const defaultSeedUsers: SeedUserInput[] = [
+  { username: "admin", password: "113521", role: UserRole.ADMIN },
+  { username: "deniz", password: "123689", role: UserRole.ADMIN },
+  { username: "ecrin", password: "1024", role: UserRole.CASHIER },
+  { username: "nurseli", password: "9854", role: UserRole.CASHIER },
+  { username: "enes", password: "1905", role: UserRole.CASHIER },
+];
+
+function loadSeedUsers(): SeedUserInput[] {
+  const raw = process.env.SEED_USERS_JSON;
+  if (!raw) {
+    if (process.env.NODE_ENV === "production") {
+      throw new Error("SEED_USERS_JSON tanımlı değil. Üretimde seed kullanıcıları env'den gelmeli.");
+    }
+    console.warn("SEED_USERS_JSON tanımlı değil; varsayılan seed kullanıcıları kullanılıyor.");
+    return defaultSeedUsers;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error("SEED_USERS_JSON geçerli bir JSON değil.");
+  }
+
+  if (!Array.isArray(parsed)) {
+    throw new Error("SEED_USERS_JSON dizi olmalı.");
+  }
+
+  return parsed.map((item, index) => {
+    const username = typeof item?.username === "string" ? item.username.trim() : "";
+    const password = typeof item?.password === "string" ? item.password : "";
+    const role = item?.role;
+
+    if (!username || !password || (role !== "ADMIN" && role !== "CASHIER")) {
+      throw new Error(`SEED_USERS_JSON geçersiz (index ${index}).`);
+    }
+
+    return { username, password, role };
+  });
+}
+
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
   throw new Error("DATABASE_URL tanımlı değil.");
@@ -16,13 +60,7 @@ const pool = new Pool({ connectionString });
 const prisma = new PrismaClient({ adapter: new PrismaPg(pool) });
 
 async function main() {
-  const seedUsers: Array<{ username: string; password: string; role: UserRole }> = [
-    { username: "admin", password: "113521", role: UserRole.ADMIN },
-    { username: "deniz", password: "123689", role: UserRole.ADMIN },
-    { username: "ecrin", password: "1024", role: UserRole.CASHIER },
-    { username: "nurseli", password: "9854", role: UserRole.CASHIER },
-    { username: "enes", password: "1905", role: UserRole.CASHIER },
-  ];
+  const seedUsers = loadSeedUsers();
 
   for (const user of seedUsers) {
     const passwordHash = await bcrypt.hash(user.password, 10);

@@ -40,7 +40,7 @@ Küçük ölçekli kafe işletmelerinde kâğıt tabanlı veya manuel kasa yöne
 
 ### Neden Geliştirildi
 
-Mevcut POS çözümlerinin lisans maliyeti, karmaşıklığı veya internet bağımlılığı küçük işletmeler için pragmatik değildir. Elloi Kasa, **sıfır lisans maliyeti**, **SQLite ile sunucusuz çalışabilme** ve **tek cihazda tam işlevsellik** sunarak bu boşluğu doldurur.
+Mevcut POS çözümlerinin lisans maliyeti, karmaşıklığı veya internet bağımlılığı küçük işletmeler için pragmatik değildir. Elloi Kasa, **sıfır lisans maliyeti**, **Railway üzerinde PostgreSQL ile ölçeklenebilir veritabanı** ve **tek cihazda tam işlevsellik** sunarak bu boşluğu doldurur.
 
 ### Hedef Kullanıcı Kitlesi
 
@@ -216,13 +216,12 @@ Sipariş ekranında ürünler alt kategoriye göre accordion yapısıyla gruplan
 │                       │                              │
 │              ┌────────┴────────┐                     │
 │              │  Prisma Client  │                     │
-│              │  (better-sqlite3│                     │
-│              │   adapter)      │                     │
+│              │   (pg adapter)  │                     │
 │              └────────┬────────┘                     │
 │                       │                              │
 │              ┌────────┴────────┐                     │
-│              │    SQLite DB    │                     │
-│              │  prisma/dev.db  │                     │
+│              │ PostgreSQL (DB) │                     │
+│              │   Railway       │                     │
 │              └─────────────────┘                     │
 └─────────────────────────────────────────────────────┘
 ```
@@ -240,7 +239,7 @@ Sipariş ekranında ürünler alt kategoriye göre accordion yapısıyla gruplan
 
 ### Veri Akışı
 
-1. **Sipariş oluşturma:** Client Component (form) → `createOrderAction` (Server Action) → `createOrder` (lib) → Prisma transaction (`$transaction`) → SQLite
+1. **Sipariş oluşturma:** Client Component (form) → `createOrderAction` (Server Action) → `createOrder` (lib) → Prisma transaction (`$transaction`) → PostgreSQL
 2. **Rapor görüntüleme:** Server Component → `getReportByRange` (lib) → Prisma query → UI render
 3. **CSV dışa aktarma:** Tarayıcı GET → API Route handler → `getReportByRange` → CSV response
 
@@ -248,8 +247,8 @@ Sipariş ekranında ürünler alt kategoriye göre accordion yapısıyla gruplan
 
 | Karar | Gerekçe |
 |-------|---------|
-| **SQLite (better-sqlite3)** | Sunucusuz deployment, sıfır yapılandırma, tek dosya yedekleme. Küçük işletme trafiği için yeterli. |
-| **Idempotent SQL bootstrap** | Prisma 7 + Node 24 ortamında schema engine migration sorunları nedeniyle, `init.sql` + `patch.js` ile doğrudan tablo oluşturma. |
+| **PostgreSQL (Railway)** | Yönetilen veritabanı, yüksek eşzamanlılık ve stabil connection yönetimi. |
+| **Prisma Migrate** | Şema değişiklikleri `prisma/migrations` üzerinden versiyonlanır ve deploy sırasında uygulanır. |
 | **Server Actions (mutation)** | Client-server sınırında tip güvenliği, otomatik revalidation, framework-native yaklaşım. |
 | **Snapshot alanları** | Sipariş satırlarında ürün adı/fiyat snapshot ile tarihsel doğruluk; fiyat değişikliklerinden bağımsız raporlama. |
 | **Transaction içinde stok kontrolü** | Yarış koşullarında sadece UI kontrolü yeterli değil; DB seviyesinde koşullu güncelleme şart. |
@@ -280,8 +279,8 @@ Sipariş ekranında ürünler alt kategoriye göre accordion yapısıyla gruplan
 | Teknoloji | Versiyon | Seçim Nedeni |
 |-----------|----------|-------------|
 | **Prisma** | ^7.4.0 | Tip güvenli ORM, schema-first yaklaşım, transaction desteği |
-| **better-sqlite3** | ^12.6.2 | Sıfır yapılandırma, sunucusuz çalışma, tek dosya DB |
-| **@prisma/adapter-better-sqlite3** | ^7.4.0 | Prisma'nın better-sqlite3 ile çalışması için driver adapter |
+| **pg** | ^8.16.0 | PostgreSQL sürücüsü |
+| **@prisma/adapter-pg** | ^7.4.0 | Prisma'nın PostgreSQL driver adapter'ı |
 
 ### Kimlik Doğrulama ve Güvenlik
 
@@ -316,7 +315,7 @@ Sipariş ekranında ürünler alt kategoriye göre accordion yapısıyla gruplan
 |-----------|-----------------|-----|
 | **Node.js** | 20+ | Node 24 ile test edilmiştir |
 | **npm** | 10+ | `package-lock.json` ile tutarlı bağımlılıklar |
-| **sqlite3** | 3.x | CLI komutları `db:migrate` script'inde kullanılır |
+| **PostgreSQL** | 14+ | Lokal geliştirme için |
 
 ### Adım Adım Kurulum
 
@@ -414,7 +413,7 @@ npm run start
 
 | Değişken | Zorunlu | Varsayılan | Açıklama |
 |----------|---------|-----------|----------|
-| `DATABASE_URL` | ✅ | — | SQLite veritabanı dosya yolu. Format: `file:./prisma/dev.db` |
+| `DATABASE_URL` | ✅ | — | Railway Postgres bağlantı URL'i. |
 | `SESSION_SECRET` | ✅ | — | JWT imzalama anahtarı. **En az 32 karakter** uzunluğunda rastgele string olmalı. |
 | `NODE_ENV` | ❌ | `development` | `development`: Prisma warn+error log, HTTP cookie secure=false. `production`: Sadece error log, cookie secure=true. |
 
@@ -432,8 +431,8 @@ Aşağıdaki değerler `src/lib/constants.ts` dosyasında tanımlıdır ve kod d
 ### Deployment Notları
 
 - `SESSION_SECRET` production'da mutlaka güçlü, rastgele bir değer olmalıdır.
-- SQLite dosyası (`prisma/dev.db`) `.gitignore`'da listelenmiştir; her ortam kendi DB'sini oluşturmalıdır.
-- `logs/` dizini de `.gitignore`'dadır; gün sonu logları her ortamda ayrı tutulur.
+- Railway Postgres bağlantıları SSL ile gelir; `DATABASE_URL` içindeki `sslmode=require` kısmını koruyun.
+- `logs/` dizini `.gitignore`'dadır; gün sonu logları her ortamda ayrı tutulur.
 
 ---
 
@@ -446,47 +445,20 @@ npm run build    # Next.js production build
 npm run start    # Production sunucusu başlat (varsayılan: port 3000)
 ```
 
-### Self-Hosted (VPS / Dedicated Server)
+### Railway + PostgreSQL
 
-1. Sunucuda Node.js 20+ ve sqlite3 kurulu olduğundan emin ol.
-2. Projeyi sunucuya klonla veya kopyala.
-3. `.env` dosyasını oluştur:
-   ```
-   DATABASE_URL="file:./prisma/dev.db"
-   SESSION_SECRET="<en-az-32-karakter-rastgele-deger>"
-   ```
-4. Kurulum:
+1. Railway'de yeni bir proje oluşturun ve PostgreSQL eklentisini ekleyin.
+2. Repo'yu Railway'e bağlayın.
+3. Railway ortam değişkenlerini ayarlayın:
+   - `DATABASE_URL` (Railway Postgres ekranında sağlanan değer)
+   - `SESSION_SECRET` (en az 32 karakter)
+4. Build/Start komutlarını Railway servis ayarlarında doğrulayın:
+   - Build: `npm run build`
+   - Start: `npm run start:railway`
+5. Demo veri gerekiyorsa (ilk kurulumda bir kez) seed çalıştırın:
    ```bash
-   npm ci --production
-   npm run db:migrate
-   npm run db:seed    # Sadece ilk kurulumda
-   npm run build
-   npm run start
+   npm run db:seed
    ```
-5. Process manager (PM2, systemd) ile uygulamayı arka planda çalıştır.
-
-### Vercel + Hosting Önerileri
-
-> **Not:** SQLite dosya tabanlıdır ve serverless ortamlarda (Vercel, AWS Lambda) kalıcı dosya sistemi olmadığı için **doğrudan uygun değildir**. Vercel'e deploy etmek istiyorsanız aşağıdaki seçenekleri değerlendirin:
-
-**Seçenek 1: Turso (LibSQL)**
-- SQLite uyumlu, edge-ready veritabanı servisi
-- Prisma'nın `@prisma/adapter-libsql` adapter'ı ile çalışır
-
-**Seçenek 2: VPS Deployment**
-- DigitalOcean, Hetzner veya benzeri VPS sağlayıcılarda Node.js sunucu
-- SQLite doğrudan dosya sisteminde çalışır
-
-**Seçenek 3 (Mevcut README'deki yöntem — dikkatli kullanılmalı):**
-1. Neon'da PostgreSQL projesi aç → `DATABASE_URL` al
-2. Vercel'de repo'yu import et
-3. Environment Variables: `DATABASE_URL`, `SESSION_SECRET`
-4. Lokalden schema + seed gönder:
-   ```bash
-   DATABASE_URL="NEON_URL" npm run db:setup
-   ```
-
-> **Uyarı:** Bu yöntem Prisma adapter'ının `better-sqlite3`'ten PostgreSQL adapter'ına değiştirilmesini gerektirir.
 
 ---
 
@@ -498,10 +470,8 @@ npm run start    # Production sunucusu başlat (varsayılan: port 3000)
 elloi-kasa/
 ├── prisma/
 │   ├── schema.prisma        # Veri modeli tanımı
-│   ├── init.sql              # Idempotent tablo oluşturma SQL'i
-│   ├── patch.js              # Mevcut DB'ye kolon ekleme script'i
 │   ├── seed.ts               # Demo veri yükleme script'i
-│   └── dev.db                # SQLite veritabanı dosyası (gitignored)
+│   └── migrations/           # Prisma migration dosyaları
 ├── prisma.config.ts          # Prisma yapılandırma
 ├── src/
 │   ├── app/
@@ -575,12 +545,10 @@ elloi-kasa/
 
 ### Yeni Bir Model/Kolon Ekleme
 
-Prisma 7 + SQLite ortamında migration akışı sorunlu olabileceğinden, projenin izlediği yaklaşım:
-
 1. `prisma/schema.prisma` dosyasına modeli/kolonu ekle
-2. `prisma/init.sql` dosyasına karşılık gelen `CREATE TABLE IF NOT EXISTS` veya `ALTER TABLE` komutunu ekle
-3. Gerekirse `prisma/patch.js` dosyasına `hasColumn` kontrolü ile koşullu `ALTER TABLE` ekle
-4. `npm run db:migrate` çalıştır (SQL çalıştırır + Prisma client üretir)
+2. Lokal ortamda migration üret: `npm run db:migrate:dev`
+3. Oluşan migration dosyalarını commit et
+4. Prod ortamda migration uygula: `npm run db:migrate`
 
 ---
 
@@ -685,17 +653,15 @@ Prisma 7 + SQLite ortamında migration akışı sorunlu olabileceğinden, projen
 
 ### Migration Stratejisi
 
-Proje, Prisma'nın standart migration akışı (`prisma migrate`) yerine **idempotent SQL bootstrap** yaklaşımı kullanır:
+Prisma Migrate kullanılır:
 
-1. **`prisma/init.sql`:** `CREATE TABLE IF NOT EXISTS` ve `CREATE INDEX IF NOT EXISTS` komutları ile tüm tabloları ve indeksleri oluşturur. Birden fazla çalıştırılabilir.
-2. **`prisma/patch.js`:** Mevcut veritabanına yeni kolon eklemek için `PRAGMA table_info` ile kolon varlığını kontrol eder, yoksa `ALTER TABLE ... ADD COLUMN` çalıştırır.
-3. **`npm run db:migrate`:** `sqlite3 prisma/dev.db < prisma/init.sql && node prisma/patch.js && prisma generate`
-
-**Bu yaklaşımın nedeni:** Prisma 7 + Node 24 ortamında schema engine migration akışı zaman zaman sorun çıkarabilmektedir. Idempotent SQL yaklaşımı uygulamayı bloklamamayı garanti eder.
+1. **Migration üretimi (lokal):** `npm run db:migrate:dev`
+2. **Migration uygulama (prod):** `npm run db:migrate`
+3. **Migration dosyaları:** `prisma/migrations/` altında versiyonlanır
 
 ### Veri Bütünlüğü Kuralları
 
-- **Foreign key constraint'ler** tüm ilişkilerde aktif (`PRAGMA foreign_keys = ON`)
+- **Foreign key constraint'ler** migration ile veritabanında aktif
 - **Cascade delete:** `Order` silindiğinde `OrderItem` kayıtları da silinir
 - **Restrict delete:** `User` silinirse ilişkili `Order` kayıtları engeller
 - **Soft delete:** Ürünler `softDeletedAt` alanı ile pasife çekilir; geçmiş sipariş ilişkileri korunur
@@ -734,7 +700,7 @@ Proje, Prisma'nın standart migration akışı (`prisma migrate`) yerine **idemp
 
 - `.env` dosyaları `.gitignore`'da — secret'lar repoya girmez
 - `SESSION_SECRET` minimum 32 karakter zorunluluğu — kısa secret ile uygulama başlamaz (`getSessionSecret()` guard)
-- Veritabanı dosyası (`prisma/dev.db`) `.gitignore`'da — hassas veri repoya dahil olmaz
+- Railway ortam değişkenleri gizlidir; veritabanı bağlantıları repoya girmez
 
 ---
 
@@ -745,8 +711,7 @@ Proje, Prisma'nın standart migration akışı (`prisma migrate`) yerine **idemp
 | Kısıt | Açıklama |
 |-------|----------|
 | **Tek şube** | Çok şubeli yapı ve merkezi raporlama desteklenmez |
-| **SQLite eşzamanlılık** | SQLite yazma işlemlerinde tablo kilidi oluşur; yüksek eşzamanlılıkta darboğaz olabilir |
-| **Serverless uyumsuzluk** | SQLite dosya tabanlıdır; Vercel/Lambda gibi ortamlarda kalıcı depolama yoktur |
+| **Bağlantı limitleri** | Railway planına göre eşzamanlı bağlantı sayısı sınırlı olabilir |
 | **Donanım entegrasyonu yok** | Yazarkasa, barkod okuyucu, fiş yazıcısı desteği yok |
 | **Çevrimdışı çalışma yok** | PWA veya offline-first mimari yok |
 | **Test coverage** | Otomatik test suite (unit/integration) henüz eklenmemiş |
@@ -755,8 +720,7 @@ Proje, Prisma'nın standart migration akışı (`prisma migrate`) yerine **idemp
 
 | Trade-Off | Açıklama |
 |-----------|----------|
-| **SQLite vs PostgreSQL** | Sıfır yapılandırma ve basitlik için SQLite tercih edildi; ölçeklenebilirlik ve eşzamanlılık PostgreSQL'e göre sınırlı |
-| **Idempotent SQL vs Prisma Migrate** | Prisma 7 + Node 24 sorunlarını aşmak için SQL bootstrap; ancak migration geçmişi ve rollback otomasyonu kaybedildi |
+| **Yönetilen DB vs Self-hosted** | Railway ile operasyonel yük azalır; ancak sağlayıcıya bağımlılık artar |
 | **Snapshot vs Normalize** | Sipariş satırlarında fiyat/ad snapshot ile tarihsel doğruluk; ancak disk kullanımı artar |
 | **Server Actions vs API Routes** | Mutation'lar için Server Actions tercih edildi; REST API tüketicileri için ayrı bir API katmanı yok |
 
@@ -787,7 +751,7 @@ Proje, Prisma'nın standart migration akışı (`prisma migrate`) yerine **idemp
 - [ ] Haftalık/aylık trend raporları ve grafik gösterimleri
 - [ ] Çoklu dil desteği (i18n)
 - [ ] Müşteri sadakat sistemi (puan/kart)
-- [ ] Veritabanını PostgreSQL'e taşıma (Turso/LibSQL alternatifi)
+- [ ] PostgreSQL performans ve indeks optimizasyonları
 
 ### Uzun Vadeli
 
@@ -806,9 +770,10 @@ Proje, Prisma'nın standart migration akışı (`prisma migrate`) yerine **idemp
 | `npm run dev` | Geliştirme sunucusunu başlatır (hot reload) |
 | `npm run build` | Production build oluşturur |
 | `npm run start` | Production sunucusunu başlatır |
+| `npm run start:railway` | Railway için migration uygular ve production sunucusunu başlatır |
 | `npm run lint` | ESLint ile kod kontrolü çalıştırır |
 | `npm run db:generate` | Prisma client'ı yeniden üretir |
-| `npm run db:migrate` | SQLite şemasını oluşturur + patch uygular + Prisma client üretir |
+| `npm run db:migrate` | Prisma migration'larını prod ortamda uygular |
 | `npm run db:reset` | Veritabanını siler ve sıfırdan oluşturur |
 | `npm run db:seed` | Demo kullanıcı ve ürün verisi yükler |
 

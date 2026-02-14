@@ -4,13 +4,31 @@ import { PaymentMethod } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { requireSession } from "@/lib/auth";
+import { requireSession, type SessionUser } from "@/lib/auth";
+import { prisma } from "@/lib/db";
 import { StockError, cancelOrder, createOrder, deliverOrder } from "@/lib/orders";
 import { createOrderSchema } from "@/lib/validators";
 
 type OrderFormState = {
   error: string | null;
 };
+
+async function assertOrderAccess(orderId: string, session: SessionUser): Promise<void> {
+  if (session.role === "ADMIN") return;
+
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    select: { createdById: true },
+  });
+
+  if (!order) {
+    throw new Error("Sipariş bulunamadı.");
+  }
+
+  if (order.createdById !== session.userId) {
+    throw new Error("Bu işlem için yetkiniz yok.");
+  }
+}
 
 function parseItems(payload: FormDataEntryValue | null): unknown {
   if (typeof payload !== "string") return [];
@@ -65,7 +83,8 @@ export async function createOrderAction(
 }
 
 export async function deliverOrderAction(orderId: string): Promise<void> {
-  await requireSession();
+  const session = await requireSession();
+  await assertOrderAccess(orderId, session);
   await deliverOrder(orderId);
 
   revalidatePath("/");
@@ -75,6 +94,7 @@ export async function deliverOrderAction(orderId: string): Promise<void> {
 
 export async function cancelOrderAction(orderId: string): Promise<void> {
   const session = await requireSession();
+  await assertOrderAccess(orderId, session);
   await cancelOrder(orderId, session.userId);
 
   revalidatePath("/");
