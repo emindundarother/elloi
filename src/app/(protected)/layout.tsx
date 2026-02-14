@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 
 import { logoutAction } from "@/app/actions/auth";
@@ -15,12 +16,22 @@ export default async function ProtectedLayout({
   return (
     <div className="min-h-screen px-4 py-4 sm:px-6 sm:py-5">
       <header className="panel no-print mb-5 flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-        <div>
-          <p className="text-xs uppercase tracking-[0.2em] text-slate-500">{APP_NAME}</p>
-          <p className="text-sm font-medium text-slate-700">
-            {session.username} • {ROLE_LABELS[session.role]}
-          </p>
-        </div>
+        <Link href="/" className="flex items-center gap-3">
+          <Image
+            src="/images/logo.jpg"
+            alt="Elloi Kasa Logo"
+            width={36}
+            height={36}
+            className="rounded-lg"
+            priority
+          />
+          <div>
+            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">{APP_NAME}</p>
+            <p className="text-sm font-medium text-slate-700">
+              {session.username} • {ROLE_LABELS[session.role]}
+            </p>
+          </div>
+        </Link>
 
         <nav className="flex flex-wrap items-center gap-2">
           <FullscreenToggle />

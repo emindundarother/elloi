@@ -1,6 +1,6 @@
 "use server";
 
-import { Prisma } from "@prisma/client";
+import { OrderStatus, Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -8,6 +8,7 @@ import path from "node:path";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { getReportByRange } from "@/lib/reports";
+import { getDayRangeUtc } from "@/lib/time";
 import { closeDaySchema, resetDayClosureSchema } from "@/lib/validators";
 
 export type CloseDayActionState = {
@@ -101,6 +102,21 @@ export async function closeDayAction(
     return {
       error: "Bu gün zaten sonlandırılmış.",
       closureId: existing.id,
+    };
+  }
+
+  const { startUtc, endUtc } = getDayRangeUtc(parsed.data.day);
+  const openOrderCount = await prisma.order.count({
+    where: {
+      status: OrderStatus.OPEN,
+      createdAt: { gte: startUtc, lte: endUtc },
+    },
+  });
+
+  if (openOrderCount > 0) {
+    return {
+      error: `Günü sonlandırmak için tüm siparişler teslim edilmiş olmalıdır. ${openOrderCount} aktif sipariş bulunuyor.`,
+      closureId: null,
     };
   }
 

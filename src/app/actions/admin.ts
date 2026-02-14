@@ -426,3 +426,39 @@ export async function toggleUserActiveAction(userId: string, isActive: boolean):
 
   revalidatePath("/admin/users");
 }
+
+export async function deleteUserAction(
+  _prev: AdminActionState,
+  formData: FormData,
+): Promise<AdminActionState> {
+  const session = await requireSession("ADMIN");
+  const userId = formData.get("userId") as string;
+
+  if (!userId) {
+    return { error: "Kullanıcı kimliği gerekli.", success: null };
+  }
+
+  if (session.userId === userId) {
+    return { error: "Kendi hesabınızı silemezsiniz.", success: null };
+  }
+
+  const orderCount = await prisma.order.count({
+    where: { createdById: userId },
+  });
+
+  if (orderCount > 0) {
+    return {
+      error: `Bu kullanıcının ${orderCount} siparişi var. Silmek yerine pasife alın.`,
+      success: null,
+    };
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.stockMovement.deleteMany({ where: { createdById: userId } });
+    await tx.dayClosure.deleteMany({ where: { createdById: userId } });
+    await tx.user.delete({ where: { id: userId } });
+  });
+
+  revalidatePath("/admin/users");
+  return { error: null, success: "Kullanıcı silindi." };
+}

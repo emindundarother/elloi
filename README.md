@@ -33,14 +33,10 @@ Elloi Kasa, kafe ortamında kasiyerlerin sipariş oluşturma, ödeme yönetimi, 
 
 Küçük ölçekli kafe işletmelerinde kâğıt tabanlı veya manuel kasa yönetiminin yarattığı sorunları ortadan kaldırır:
 
-- **Sipariş karışıklığı:** Sıralı sipariş numaralandırma ve durumunu takip (açık → teslim edildi → iptal) ile siparişler kaybolmaz.
+- **Sipariş karışıklığı:** Sıralı sipariş numaralandırma ve durum takibi (açık → teslim edildi → iptal) ile siparişler kaybolmaz.
 - **Stok tutarsızlığı:** Sipariş kaydedildiğinde stok otomatik düşer, iptal edildiğinde geri eklenir — transaction seviyesinde korunur.
 - **Gün sonu hesap kontrolü:** Z raporu toplamı ile sistem cirosu otomatik karşılaştırılır; fark varsa uyarı üretilir.
 - **Fiyat geçmişi kaybı:** Sipariş satırlarında ürün adı ve fiyat snapshot olarak saklanır; sonradan yapılan fiyat değişiklikleri eski siparişleri etkilemez.
-
-### Neden Geliştirildi
-
-Mevcut POS çözümlerinin lisans maliyeti, karmaşıklığı veya internet bağımlılığı küçük işletmeler için pragmatik değildir. Elloi Kasa, **sıfır lisans maliyeti**, **Railway üzerinde PostgreSQL ile ölçeklenebilir veritabanı** ve **tek cihazda tam işlevsellik** sunarak bu boşluğu doldurur.
 
 ### Hedef Kullanıcı Kitlesi
 
@@ -49,19 +45,9 @@ Mevcut POS çözümlerinin lisans maliyeti, karmaşıklığı veya internet bağ
 | **Kasiyer** | Kafe çalışanı; sipariş alma, teslim etme, iptal etme işlemlerini hızlıca yapar. |
 | **Admin** | İşletme sahibi veya yöneticisi; ürün/fiyat/stok yönetimi, raporlama, kullanıcı yönetimi, gün sonu kapanışı yapar. |
 
-### Gerçek Kullanım Senaryoları
-
-1. **Kasiyer sipariş akışı:** Kasiyer giriş yapar → Ana sayfada açık siparişleri görür → `+ Yeni Sipariş` ile ürün seçer → İçecek özelleştirmesi (boyut, süt tipi) yapar → Ödeme yöntemini seçer → Kaydeder. Stok otomatik düşer.
-2. **Gün sonu kapanış:** Admin/Kasiyer → Gün sonu raporunu açar → Z raporu toplamını girer → Sistem cirosu ile karşılaştırılır → Fark varsa uyarı gösterilir → Rapor PDF/CSV olarak dışa aktarılır. Kapanış sonrası yeni sipariş açılması engellenir.
-3. **Fiyat güncelleme:** Admin → Ürün yönetimine girer → Fiyatı düzenler → `Tüm Değişiklikleri Kaydet` ile onaylar. Mevcut açık siparişler etkilenmez (snapshot mekanizması).
-
 ---
 
 ## 2. Amaç ve Kapsam
-
-### Kullanım Amacı
-
-Tek şube, az sayıda kasiyer ile çalışan kafe/restoran operasyonlarının günlük kasa süreçlerini dijitalleştirmek.
 
 ### Hangi Durumlar İçin Tasarlanmıştır
 
@@ -69,7 +55,6 @@ Tek şube, az sayıda kasiyer ile çalışan kafe/restoran operasyonlarının g�
 - ✅ 1–10 arası eşzamanlı kasiyer
 - ✅ Tablet veya bilgisayar üzerinden kasa kullanımı
 - ✅ Günlük ciro takibi ve Z raporu karşılaştırması
-- ✅ Ürün menüsünün yöneticiler tarafından düzenlenmesi
 - ✅ İçecek özelleştirmesi (boyut, süt tipi) ve dinamik fiyatlandırma
 
 ### Hangi Durumlar İçin Uygun Değildir
@@ -80,10 +65,6 @@ Tek şube, az sayıda kasiyer ile çalışan kafe/restoran operasyonlarının g�
 - ❌ Envanter yönetimi (hammadde bazlı reçete takibi)
 - ❌ Muhasebe / e-fatura entegrasyonu
 
-### Uygulama Tipi
-
-**Dahili araç (internal tool).** İşletme personeli tarafından lokal ağ veya bulut üzerinden kullanılmak üzere tasarlanmıştır. Doğrudan müşteriye açık bir arayüz içermez.
-
 ---
 
 ## 3. Özellikler
@@ -93,18 +74,17 @@ Tek şube, az sayıda kasiyer ile çalışan kafe/restoran operasyonlarının g�
 | Özellik | Açıklama |
 |---------|----------|
 | Sipariş oluşturma | Ürün seçimi, adet, özelleştirme, ödeme yöntemi ve serbest not ile |
-| Sipariş numaralandırma | `ELL-YYYYMMDD-NNN` formatında otomatik sıralı; çakışma durumunda 3 denemeye kadar retry |
+| Sipariş numaralandırma | `ELL-YYYYMMDD-NNN` formatında otomatik sıralı; çakışma durumunda retry |
 | Sipariş durumu | `OPEN` → `DELIVERED` → `CANCELED` yaşam döngüsü |
 | Sipariş iptali | Açık veya teslim edilmiş siparişler iptal edilebilir; stok otomatik geri eklenir |
-| Sipariş silme | Rapor ekranından `Sil` aksiyonu; zorunlu onay diyaloğu ile |
 | Snapshot mekanizması | Her sipariş satırında `productNameSnapshot` ve `unitPriceSnapshot` saklanır |
 
 ### İçecek Özelleştirmesi
 
 | Özellik | Açıklama |
 |---------|----------|
-| Boyut | Küçük / Büyük — Büyük boyut +10₺ ek ücret |
-| Süt tipi | Normal / Laktozsuz / Badem Sütü / Yulaf Sütü / Sütsüz — Bitkisel süt +40₺ |
+| Boyut | Küçük / Büyük — Büyük boyut ek ücretli |
+| Süt tipi | Normal / Laktozsuz / Badem Sütü / Yulaf Sütü / Sütsüz — Bitkisel süt ek ücretli |
 | Ek ücret hesaplama | Hem UI'da canlı hem backend'de server-side doğrulama ile uygulanır |
 
 ### Stok Takibi
@@ -118,64 +98,23 @@ Tek şube, az sayıda kasiyer ile çalışan kafe/restoran operasyonlarının g�
 ### Gün Sonu Kapanış
 
 - Z raporu toplamı girilmeden kapanış yapılamaz
+- Açık siparişler varken gün kapatılamaz — tüm siparişler teslim/iptal edilmelidir
 - Sistem cirosu ile Z raporu otomatik karşılaştırılır
-- Fark varsa `gün sonu rakamları tutmuyor` uyarısı
-- Kapanış sonrası yeni sipariş açılması otomatik engellenir (`/order/new` rotası dahil)
-- DB kaydı + `logs/day-close.log` dosya logu birlikte tutulur
-- Admin'e özel kapanış sıfırlama: DB kaydı + log satırı birlikte temizlenir
+- Kapanış sonrası yeni sipariş açılması otomatik engellenir
+- DB kaydı + dosya logu birlikte tutulur
 
 ### Raporlama
 
-- Günlük/tarih aralığı raporu: toplam ciro, sipariş sayısı, ödeme yöntemi kırılımı, ürün kırılımı
-- Sipariş detay expand (satır bazlı ürünler)
-- CSV dışa aktarma: `/api/reports/day.csv` ve `/api/reports/day-close.csv`
-- PDF yazdırma desteği (`window.print()` ile)
-- Kapanış raporunda: raporcu adı, oluşturulma tarihi/saati
+- Günlük rapor: toplam ciro, sipariş sayısı, ödeme yöntemi kırılımı, ürün kırılımı
+- CSV dışa aktarma
+- PDF yazdırma desteği
 
 ### Admin Portalı
 
-- **Ürün yönetimi:** Ad, kategori, alt kategori, fiyat (ana ücret + küsürat), stok takip durumu, aktif/pasif durumu
-- **Toplu kaydetme:** Tüm değişiklikler tek `Tüm Değişiklikleri Kaydet` butonuyla; kaydedilmemiş değişiklikler için uyarı
+- **Ürün yönetimi:** Ad, kategori, alt kategori, fiyat, stok takip durumu, aktif/pasif
+- **Toplu kaydetme:** Tüm değişiklikler tek butonla
 - **Kullanıcı yönetimi:** Kullanıcı oluşturma (ad, şifre, rol), aktif/pasif yönetimi
 - **Admin raporları:** Tarih aralığı seçimli detaylı raporlar
-
-### Ödeme Yöntemleri
-
-4 ödeme yöntemi desteklenir:
-
-| Enum | Etiket |
-|------|--------|
-| `CASH` | Nakit |
-| `CARD` | Kredi Kartı |
-| `METROPOL` | Metropol Kart |
-| `EDENRED` | Ticket Edenred |
-
-### Ürün Kategorileri ve Alt Kategorileri
-
-Ana kategoriler: `FOOD`, `DRINK`, `EXTRAS`
-
-| Alt Kategori | Etiket | Üst Kategori |
-|-------------|--------|--------------|
-| `HOT_COFFEES` | Sıcak Kahveler | DRINK |
-| `COLD_COFFEES` | Soğuk Kahveler | DRINK |
-| `OTHER_HOT_DRINKS` | Diğer Sıcak İçecekler | DRINK |
-| `TEAS` | Çaylar | DRINK |
-| `COLD_TEAS` | Soğuk Çaylar | DRINK |
-| `SOFT_DRINKS` | Soft İçecekler | DRINK |
-| `SAVORIES` | Sandviçler / Tuzlular | FOOD |
-| `DESSERTS` | Tatlılar | FOOD |
-| `EXTRAS` | Ekstralar | EXTRAS |
-
-Sipariş ekranında ürünler alt kategoriye göre accordion yapısıyla gruplanır.
-
-### Edge-Case Yönetimi
-
-- **Stok yarış koşulu:** Sadece UI kontrolü değil, transaction içinde `stockQty >= qty` koşullu update
-- **Sipariş numarası çakışması:** `P2002` unique constraint hatası yakalanır, 3 denemeye kadar retry
-- **Gün sonu sonrası sipariş engeli:** Dashboard'da buton inaktif + rota seviyesinde engel
-- **Pasif ürün koruması:** Sipariş oluşturmada aktif olmayan ürünler reddedilir
-- **Fiyat tutarsızlığı koruması:** Ek ücretler (boyut, süt tipi) hem frontend hem backend'de hesaplanır
-- **Eski enum taşıma:** `TICKET` → `EDENRED` değişikliğinde mevcut kayıtlar SQL patch ile migrate edilir
 
 ---
 
@@ -198,27 +137,25 @@ Sipariş ekranında ürünler alt kategoriye göre accordion yapısıyla gruplan
 │                │  │Admin/*  │ │                      │
 │                │  └─────────┘ │                      │
 │                └──────────────┘                      │
-│                       │                              │
+│              ┌───────────────────┐                   │
+│              │   Middleware.ts   │                   │
+│              │  (Edge Route      │                   │
+│              │   Protection)     │                   │
+│              └────────┬──────────┘                   │
 │              ┌────────┴────────┐                     │
 │              │  Server Actions │                     │
 │              │  (auth, orders, │                     │
 │              │  admin, day-    │                     │
 │              │  close)         │                     │
 │              └────────┬────────┘                     │
-│                       │                              │
 │              ┌────────┴────────┐                     │
 │              │    src/lib/     │                     │
 │              │  Business Logic │                     │
-│              │  (orders, auth, │                     │
-│              │  reports, time, │                     │
-│              │  validators)    │                     │
 │              └────────┬────────┘                     │
-│                       │                              │
 │              ┌────────┴────────┐                     │
 │              │  Prisma Client  │                     │
 │              │   (pg adapter)  │                     │
 │              └────────┬────────┘                     │
-│                       │                              │
 │              ┌────────┴────────┐                     │
 │              │ PostgreSQL (DB) │                     │
 │              │   Railway       │                     │
@@ -230,29 +167,19 @@ Sipariş ekranında ürünler alt kategoriye göre accordion yapısıyla gruplan
 
 | Katman | Konum | Sorumluluk |
 |--------|-------|------------|
+| **Edge Middleware** | `src/middleware.ts` | Tüm route'larda cookie kontrolü, auth redirect |
 | **UI (Server Components)** | `src/app/` | Sayfa render, layout, veri çekme |
 | **UI (Client Components)** | `src/components/` | İnteraktif formlar, tablolar, state yönetimi |
-| **Server Actions** | `src/app/actions/` | Mutation'lar: form submit, sipariş oluşturma/iptal, gün sonu kapanış |
-| **İş Mantığı** | `src/lib/` | Sipariş oluşturma, stok yönetimi, rapor hesaplama, doğrulama şemaları |
-| **Veri Erişimi** | `src/lib/db.ts` | Prisma client singleton yönetimi |
+| **Server Actions** | `src/app/actions/` | Mutation'lar: form submit, sipariş oluşturma/iptal |
+| **İş Mantığı** | `src/lib/` | Sipariş oluşturma, stok yönetimi, doğrulama, rate limiting |
+| **Veri Erişimi** | `src/lib/db.ts` | Prisma client singleton |
 | **API Routes** | `src/app/api/` | CSV dışa aktarma endpoint'leri |
 
 ### Veri Akışı
 
-1. **Sipariş oluşturma:** Client Component (form) → `createOrderAction` (Server Action) → `createOrder` (lib) → Prisma transaction (`$transaction`) → PostgreSQL
-2. **Rapor görüntüleme:** Server Component → `getReportByRange` (lib) → Prisma query → UI render
-3. **CSV dışa aktarma:** Tarayıcı GET → API Route handler → `getReportByRange` → CSV response
-
-### Önemli Mimari Kararlar
-
-| Karar | Gerekçe |
-|-------|---------|
-| **PostgreSQL (Railway)** | Yönetilen veritabanı, yüksek eşzamanlılık ve stabil connection yönetimi. |
-| **Prisma Migrate** | Şema değişiklikleri `prisma/migrations` üzerinden versiyonlanır ve deploy sırasında uygulanır. |
-| **Server Actions (mutation)** | Client-server sınırında tip güvenliği, otomatik revalidation, framework-native yaklaşım. |
-| **Snapshot alanları** | Sipariş satırlarında ürün adı/fiyat snapshot ile tarihsel doğruluk; fiyat değişikliklerinden bağımsız raporlama. |
-| **Transaction içinde stok kontrolü** | Yarış koşullarında sadece UI kontrolü yeterli değil; DB seviyesinde koşullu güncelleme şart. |
-| **Cihaz zaman dilimi** | Sabit `Europe/Istanbul` yerine `Intl.DateTimeFormat().resolvedOptions().timeZone` ile runtime zaman dilimi; farklı cihazlarda tutarlılık. |
+1. **Request:** Tarayıcı → **Middleware** (cookie kontrolü) → Server Component / Server Action
+2. **Sipariş oluşturma:** Client Component (form) → `createOrderAction` → `createOrder` → Prisma `$transaction` → PostgreSQL
+3. **Rapor:** Server Component → `getReportByRange` → Prisma query → UI render
 
 ---
 
@@ -262,48 +189,31 @@ Sipariş ekranında ürünler alt kategoriye göre accordion yapısıyla gruplan
 
 | Teknoloji | Versiyon | Seçim Nedeni |
 |-----------|----------|-------------|
-| **Next.js** | 16.1.6 | App Router, Server Components, Server Actions ile tek framework'te full-stack geliştirme |
-| **React** | 19.2.3 | Server Components ve `useActionState` hook desteği |
-| **TypeScript** | ^5 | Tip güvenliği, IDE otomatik tamamlama, derleme zamanı hata yakalama |
-
-### Stil ve UI
-
-| Teknoloji | Versiyon | Seçim Nedeni |
-|-----------|----------|-------------|
-| **Tailwind CSS** | ^4 | Utility-first CSS, hızlı prototipleme, tutarlı tasarım tokenleri |
-| **Manrope** | Google Fonts | Modern, okunabilir UI fontu |
-| **JetBrains Mono** | Google Fonts | Monospace font (fiyatlar, kodlar için) |
+| **Next.js** | 16 | App Router, Server Components, Server Actions |
+| **React** | 19 | Server Components ve `useActionState` hook |
+| **TypeScript** | 5 | Tip güvenliği, derleme zamanı hata yakalama |
 
 ### Veritabanı ve ORM
 
 | Teknoloji | Versiyon | Seçim Nedeni |
 |-----------|----------|-------------|
-| **Prisma** | ^7.4.0 | Tip güvenli ORM, schema-first yaklaşım, transaction desteği |
-| **pg** | ^8.16.0 | PostgreSQL sürücüsü |
-| **@prisma/adapter-pg** | ^7.4.0 | Prisma'nın PostgreSQL driver adapter'ı |
+| **PostgreSQL** | 14+ | ACID uyumlu, yüksek eşzamanlılık |
+| **Prisma** | 7 | Tip güvenli ORM, schema-first, transaction desteği |
 
 ### Kimlik Doğrulama ve Güvenlik
 
-| Teknoloji | Versiyon | Seçim Nedeni |
-|-----------|----------|-------------|
-| **jose** | ^6.1.3 | Edge-uyumlu JWT imzalama/doğrulama (Node.js crypto'ya bağımlı değil) |
-| **bcryptjs** | ^3.0.3 | Şifre hash'leme (salt round: 10) |
+| Teknoloji | Seçim Nedeni |
+|-----------|-------------|
+| **jose** | Edge-uyumlu JWT imzalama/doğrulama |
+| **bcryptjs** | Şifre hash'leme (salt round: 10) |
+| **Zod** | Runtime şema doğrulama |
 
-### Doğrulama ve Yardımcılar
+### Stil
 
-| Teknoloji | Versiyon | Seçim Nedeni |
-|-----------|----------|-------------|
-| **Zod** | ^4.3.6 | Runtime şema doğrulama, TypeScript tip çıkarımı |
-| **date-fns** + **date-fns-tz** | ^4.1.0 / ^3.2.0 | Zaman dilimi duyarlı tarih formatlama ve dönüşüm |
-| **clsx** | ^2.1.1 | Koşullu CSS sınıf birleştirme |
-
-### Geliştirme Araçları
-
-| Araç | Seçim Nedeni |
-|------|-------------|
-| **ESLint** | Kod kalitesi ve tutarlılık |
-| **tsx** | TypeScript dosyalarını doğrudan çalıştırma (seed script) |
-| **PostCSS** | Tailwind CSS derlemesi |
+| Teknoloji | Seçim Nedeni |
+|-----------|-------------|
+| **Tailwind CSS** | Utility-first CSS, hızlı prototipleme |
+| **Manrope + JetBrains Mono** | Modern UI ve monospace fontlar |
 
 ---
 
@@ -311,11 +221,11 @@ Sipariş ekranında ürünler alt kategoriye göre accordion yapısıyla gruplan
 
 ### Ön Gereksinimler
 
-| Gereksinim | Minimum Versiyon | Not |
-|-----------|-----------------|-----|
-| **Node.js** | 20+ | Node 24 ile test edilmiştir |
-| **npm** | 10+ | `package-lock.json` ile tutarlı bağımlılıklar |
-| **PostgreSQL** | 14+ | Lokal geliştirme için |
+| Gereksinim | Minimum Versiyon |
+|-----------|-----------------|
+| **Node.js** | 20+ |
+| **npm** | 10+ |
+| **PostgreSQL** | 14+ |
 
 ### Adım Adım Kurulum
 
@@ -329,55 +239,64 @@ npm install
 
 # 3. Ortam değişkenlerini ayarla
 cp .env.example .env
-# .env dosyasını düzenleyerek SESSION_SECRET değerini değiştir
-
-# 4. Veritabanını oluştur ve şemayı uygula
-npm run db:migrate
-
-# 5. Örnek veriyi yükle (ürünler + kullanıcılar)
-npm run db:seed
-
-# 6. Geliştirme sunucusunu başlat
-npm run dev
+# .env dosyasını düzenle — aşağıdaki "Yapılandırma" bölümüne bak
 ```
 
-Uygulama varsayılan olarak `http://localhost:3000` adresinde açılır.
+### Ortam Değişkenlerini Yapılandır
 
-### Demo Hesaplar
+`.env` dosyasında şu değişkenleri tanımla:
 
-| Kullanıcı | Şifre | Rol |
-|-----------|-------|-----|
-| `admin` | `113521` | Admin |
-| `deniz` | `123689` | Admin |
-| `ecrin` | `1024` | Kasiyer |
-| `nurseli` | `9854` | Kasiyer |
-| `enes` | `1905` | Kasiyer |
+```env
+DATABASE_URL="postgresql://<user>:<password>@<host>:<port>/<db>"
+SESSION_SECRET="<en-az-32-karakter-rastgele-string>"
+```
+
+> **SESSION_SECRET üretmek için:**
+> ```bash
+> openssl rand -base64 48
+> ```
+
+### Veritabanını Hazırla
+
+```bash
+# Şemayı uygula
+npm run db:migrate
+
+# Kullanıcı ve ürün verisi yükle
+npm run db:seed
+```
+
+### Kullanıcı Seed Yapılandırması
+
+Seed script'i kullanıcı bilgilerini `SEED_USERS_JSON` ortam değişkeninden okur:
+
+```env
+SEED_USERS_JSON='[{"username":"admin","password":"güçlü-şifre-buraya","role":"ADMIN"},{"username":"kasiyer1","password":"güçlü-şifre","role":"CASHIER"}]'
+```
+
+> ⚠️ **Dikkat:** Production ortamında `SEED_USERS_JSON` tanımlı olmalıdır. Tanımlı değilse seed başarısız olur.
+
+### Geliştirme Sunucusu
+
+```bash
+npm run dev
+# http://localhost:3000
+```
 
 ---
 
 ## 7. Kullanım
-
-### Uygulama Nasıl Çalıştırılır
-
-```bash
-# Geliştirme modu (hot reload)
-npm run dev
-
-# Production build
-npm run build
-npm run start
-```
 
 ### Route Haritası
 
 | Route | Açıklama | Erişim |
 |-------|----------|--------|
 | `/login` | Giriş sayfası | Herkese açık |
-| `/` | Ana sayfa — açık siparişler, günün geçmiş siparişleri, yeni sipariş butonu | Kasiyer, Admin |
+| `/` | Ana sayfa — açık siparişler, günün geçmiş siparişleri | Kasiyer, Admin |
 | `/order/new` | Yeni sipariş oluşturma | Kasiyer, Admin |
 | `/reports/day` | Günlük rapor ve gün sonu kapanış | Kasiyer, Admin |
 | `/reports/close` | Gün sonu kapanış raporu detayı | Kasiyer, Admin |
-| `/admin/products` | Ürün yönetimi (ekleme, düzenleme, fiyat, stok) | Sadece Admin |
+| `/admin/products` | Ürün yönetimi | Sadece Admin |
 | `/admin/reports` | Admin detaylı raporlar | Sadece Admin |
 | `/admin/users` | Kullanıcı yönetimi | Sadece Admin |
 
@@ -391,19 +310,17 @@ npm run start
 ### Örnek Kullanım Akışları
 
 **Sipariş Oluşturma:**
-1. Giriş yap → Ana sayfada `+ Yeni Sipariş` butonuna tıkla
-2. Alt kategori başlıklarına tıklayarak ürün listesini aç (accordion yapısı)
-3. Ürün seçiminde içecek ise: boyut (Küçük/Büyük) ve süt tipi seç
-4. Ödeme yöntemini seç (Nakit, Kredi Kartı, Metropol Kart, Ticket Edenred)
-5. İsterseniz sipariş notu ekle
-6. `Kaydet` → Ana sayfaya yönlendirilir, sipariş açık siparişler tablosunda görünür
+1. Giriş yap → `+ Yeni Sipariş` butonuna tıkla
+2. Alt kategori başlığına dokunarak ürün listesini aç
+3. İçecek ise: boyut ve süt tipi seç
+4. Ödeme yöntemini seç
+5. `Siparişi Kaydet` → Ana sayfaya yönlendirilir
 
 **Gün Sonu Kapanış:**
-1. `Özet` menüsünden gün sonu raporuna git
-2. `Günü Sonlandır` butonuna tıkla
-3. Açılan modalda günlük ciroyu gör, Z Raporu Toplamını gir
-4. `Raporu Oluştur` → Fark analizi yapılır + log kaydı oluşur
-5. Kapanış sonrası yeni sipariş açılamaz hale gelir
+1. Raporlar → Gün sonu raporuna git
+2. Z Raporu Toplamını gir
+3. `Günü Sonlandır` → Fark analizi yapılır
+4. Kapanış sonrası yeni sipariş açılamaz
 
 ---
 
@@ -411,28 +328,23 @@ npm run start
 
 ### Environment Değişkenleri
 
-| Değişken | Zorunlu | Varsayılan | Açıklama |
-|----------|---------|-----------|----------|
-| `DATABASE_URL` | ✅ | — | Railway Postgres bağlantı URL'i. |
-| `SESSION_SECRET` | ✅ | — | JWT imzalama anahtarı. **En az 32 karakter** uzunluğunda rastgele string olmalı. |
-| `NODE_ENV` | ❌ | `development` | `development`: Prisma warn+error log, HTTP cookie secure=false. `production`: Sadece error log, cookie secure=true. |
+| Değişken | Zorunlu | Açıklama |
+|----------|---------|----------|
+| `DATABASE_URL` | ✅ | PostgreSQL bağlantı URL'i |
+| `SESSION_SECRET` | ✅ | JWT imzalama anahtarı. **En az 32 karakter** rastgele string. |
+| `SEED_USERS_JSON` | ⚠️ Prod | Seed kullanıcıları JSON formatında. Production'da zorunlu. |
+| `NODE_ENV` | ❌ | `production`: secure cookie, minimal log. `development`: varsayılan. |
 
 ### Uygulama Sabitleri
 
-Aşağıdaki değerler `src/lib/constants.ts` dosyasında tanımlıdır ve kod değişikliği gerektirir:
+`src/lib/constants.ts` dosyasında tanımlıdır:
 
-| Sabit | Değer | Açıklama |
-|-------|-------|----------|
-| `APP_NAME` | `"Elloi Kasa"` | UI'da gösterilen uygulama adı |
-| `SESSION_COOKIE_NAME` | `"elloi_session"` | Session cookie adı |
-| `DRINK_LARGE_SIZE_EXTRA` | `10` | Büyük boy içecek ek ücreti (₺) |
-| `DRINK_PLANT_BASED_MILK_EXTRA` | `40` | Bitkisel süt ek ücreti (₺) |
-
-### Deployment Notları
-
-- `SESSION_SECRET` production'da mutlaka güçlü, rastgele bir değer olmalıdır.
-- Railway Postgres bağlantıları SSL ile gelir; `DATABASE_URL` içindeki `sslmode=require` kısmını koruyun.
-- `logs/` dizini `.gitignore`'dadır; gün sonu logları her ortamda ayrı tutulur.
+| Sabit | Açıklama |
+|-------|----------|
+| `APP_NAME` | UI'da gösterilen uygulama adı |
+| `SESSION_COOKIE_NAME` | Session cookie adı |
+| `DRINK_LARGE_SIZE_EXTRA` | Büyük boy içecek ek ücreti (₺) |
+| `DRINK_PLANT_BASED_MILK_EXTRA` | Bitkisel süt ek ücreti (₺) |
 
 ---
 
@@ -441,24 +353,30 @@ Aşağıdaki değerler `src/lib/constants.ts` dosyasında tanımlıdır ve kod d
 ### Production Build
 
 ```bash
-npm run build    # Next.js production build
-npm run start    # Production sunucusu başlat (varsayılan: port 3000)
+npm run build
+npm run start
 ```
 
-### Railway + PostgreSQL
+### Railway Deployment
 
-1. Railway'de yeni bir proje oluşturun ve PostgreSQL eklentisini ekleyin.
-2. Repo'yu Railway'e bağlayın.
-3. Railway ortam değişkenlerini ayarlayın:
-   - `DATABASE_URL` (Railway Postgres ekranında sağlanan değer)
-   - `SESSION_SECRET` (en az 32 karakter)
-4. Build/Start komutlarını Railway servis ayarlarında doğrulayın:
+1. Railway'de yeni proje oluşturun ve PostgreSQL eklentisini ekleyin.
+2. GitHub repo'yu Railway projesine bağlayın.
+3. Ortam değişkenlerini Railway dashboard'da tanımlayın:
+   - `DATABASE_URL` — Railway Postgres URL
+   - `SESSION_SECRET` — `openssl rand -base64 48` ile üretilmiş güçlü anahtar
+   - `SEED_USERS_JSON` — Kullanıcı bilgileri (şifreler güçlü olmalı)
+4. Build/Start komutları:
    - Build: `npm run build`
    - Start: `npm run start:railway`
-5. Demo veri gerekiyorsa (ilk kurulumda bir kez) seed çalıştırın:
-   ```bash
-   npm run db:seed
-   ```
+5. İlk kurulumda seed çalıştırın.
+
+### Deployment Kontrol Listesi
+
+- [ ] `SESSION_SECRET` en az 32 karakter, rastgele üretilmiş
+- [ ] `SEED_USERS_JSON` tanımlı ve şifreler güçlü
+- [ ] Veritabanı bağlantısı SSL ile
+- [ ] Railway'de HTTPS otomatik aktif
+- [ ] GitHub repo'su **private**
 
 ---
 
@@ -469,84 +387,53 @@ npm run start    # Production sunucusu başlat (varsayılan: port 3000)
 ```
 elloi-kasa/
 ├── prisma/
-│   ├── schema.prisma        # Veri modeli tanımı
-│   ├── seed.ts               # Demo veri yükleme script'i
-│   └── migrations/           # Prisma migration dosyaları
-├── prisma.config.ts          # Prisma yapılandırma
+│   ├── schema.prisma          # Veri modeli tanımı
+│   ├── seed.ts                # Seed script
+│   └── migrations/            # Migration dosyaları
 ├── src/
+│   ├── middleware.ts           # Edge route koruması
 │   ├── app/
-│   │   ├── layout.tsx        # Root layout (font, metadata, HTML shell)
-│   │   ├── globals.css       # Global stiller
-│   │   ├── login/            # Giriş sayfası
-│   │   ├── (protected)/      # Auth gerektiren route group
-│   │   │   ├── layout.tsx    # Header, navigasyon, session kontrolü
-│   │   │   ├── page.tsx      # Ana sayfa (dashboard)
-│   │   │   ├── order/new/    # Yeni sipariş sayfası
-│   │   │   ├── reports/      # Raporlama sayfaları
-│   │   │   │   ├── day/      # Günlük rapor
-│   │   │   │   └── close/    # Gün sonu kapanış raporu
-│   │   │   └── admin/        # Admin sayfaları
-│   │   │       ├── products/ # Ürün yönetimi
-│   │   │       ├── reports/  # Admin raporları
-│   │   │       └── users/    # Kullanıcı yönetimi
-│   │   ├── actions/          # Server Actions (mutation'lar)
-│   │   │   ├── auth.ts       # Login / Logout
-│   │   │   ├── orders.ts     # Sipariş CRUD
-│   │   │   ├── admin.ts      # Ürün / kullanıcı yönetimi
-│   │   │   └── day-close.ts  # Gün sonu kapanış / sıfırlama
+│   │   ├── layout.tsx         # Root layout
+│   │   ├── login/             # Giriş sayfası
+│   │   ├── (protected)/       # Auth gerektiren route group
+│   │   │   ├── layout.tsx     # Header, navigasyon, session
+│   │   │   ├── page.tsx       # Dashboard
+│   │   │   ├── order/new/     # Yeni sipariş
+│   │   │   ├── reports/       # Raporlama
+│   │   │   └── admin/         # Admin paneli
+│   │   ├── actions/           # Server Actions
+│   │   │   ├── auth.ts        # Login / Logout
+│   │   │   ├── orders.ts      # Sipariş CRUD
+│   │   │   ├── admin.ts       # Ürün / kullanıcı yönetimi
+│   │   │   └── day-close.ts   # Gün sonu kapanış
 │   │   └── api/
-│   │       └── reports/      # CSV export route handler'ları
-│   ├── components/           # Client Components
-│   │   ├── order-create-form.tsx       # Sipariş oluşturma formu
-│   │   ├── admin-products-table.tsx    # Ürün yönetim tablosu
-│   │   ├── admin-product-create-form.tsx # Yeni ürün formu
-│   │   ├── admin-user-create-form.tsx  # Yeni kullanıcı formu
-│   │   ├── day-close-form.tsx          # Gün sonu kapanış formu/modal
-│   │   ├── report-view.tsx             # Rapor görüntüleme bileşeni
-│   │   ├── confirm-submit-button.tsx   # Onaylı submit butonu
-│   │   ├── fullscreen-toggle.tsx       # Tam ekran geçişi
-│   │   └── print-button.tsx            # Yazdırma butonu
-│   └── lib/                  # Paylaşılan iş mantığı
-│       ├── auth.ts           # Session oluşturma, doğrulama, JWT
-│       ├── db.ts             # Prisma client singleton
-│       ├── constants.ts      # Uygulama sabitleri, etiketler
-│       ├── orders.ts         # Sipariş CRUD iş mantığı
-│       ├── reports.ts        # Rapor hesaplama
-│       ├── validators.ts     # Zod doğrulama şemaları
-│       ├── time.ts           # Zaman dilimi yardımcıları
-│       ├── format.ts         # Para/tarih formatlama
-│       └── product-subcategory.ts # Alt kategori tanım ve inference
-├── public/                   # Statik dosyalar (favicon, SVG'ler)
-├── logs/                     # Gün sonu kapanış logları (gitignored)
+│   │       └── reports/       # CSV export
+│   ├── components/            # Client Components
+│   └── lib/                   # Paylaşılan iş mantığı
+│       ├── auth.ts            # JWT session yönetimi
+│       ├── db.ts              # Prisma client singleton
+│       ├── rate-limit.ts      # Login rate limiting
+│       ├── validators.ts      # Zod doğrulama şemaları
+│       ├── orders.ts          # Sipariş iş mantığı
+│       ├── reports.ts         # Rapor hesaplama
+│       ├── time.ts            # Zaman dilimi yardımcıları
+│       └── format.ts          # Para/tarih formatlama
+├── next.config.ts             # Security headers
 ├── package.json
-├── tsconfig.json
-├── next.config.ts
-├── postcss.config.mjs
-├── eslint.config.mjs
-└── LESSONS.md                # Geliştirme sürecinde öğrenilen dersler
+└── tsconfig.json
 ```
 
 ### Kodlama Standartları
 
-- **TypeScript strict mode** aktif (`"strict": true`)
-- **Zod ile runtime doğrulama:** Tüm form girdileri ve mutation parametreleri Zod şemaları ile doğrulanır
-- **Server Actions kullanımı:** Mutation'lar için `"use server"` direktifi; try/catch ile hata yakalama, error state dönüşü
-- **Transaction kullanımı:** Stok değişikliği içeren tüm operasyonlar `prisma.$transaction()` içinde yapılır
-- **Türkçe hata mesajları:** Kullanıcıya gösterilen tüm hata mesajları Türkçe
-- **İsimlendirme:** Dosya adları kebab-case, bileşen adları PascalCase, değişkenler camelCase
-
-### Katkı Süreci
-
-1. Feature branch oluştur: `git checkout -b feature/yeni-ozellik`
-2. Değişiklikleri yap ve lint kontrolü çalıştır: `npm run lint`
-3. Build'in geçtiğinden emin ol: `npm run build`
-4. Commit ve push: `git push origin feature/yeni-ozellik`
-5. Pull request aç
+- **TypeScript strict mode** aktif
+- **Zod ile runtime doğrulama** — tüm form girdileri ve mutation parametreleri
+- **Transaction kullanımı** — stok değişikliği içeren tüm operasyonlar `prisma.$transaction()` içinde
+- **Türkçe hata mesajları** — kullanıcıya gösterilen tüm mesajlar Türkçe
 
 ### Yeni Bir Model/Kolon Ekleme
 
 1. `prisma/schema.prisma` dosyasına modeli/kolonu ekle
-2. Lokal ortamda migration üret: `npm run db:migrate:dev`
+2. Migration üret: `npm run db:migrate:dev`
 3. Oluşan migration dosyalarını commit et
 4. Prod ortamda migration uygula: `npm run db:migrate`
 
@@ -560,72 +447,26 @@ elloi-kasa/
 ┌──────────┐       ┌───────────┐       ┌────────────┐
 │   User   │──1:N──│   Order   │──1:N──│ OrderItem  │
 │          │       │           │       │            │
-│ id       │       │ id        │       │ id         │
-│ username │       │ orderNo   │       │ orderId    │
-│ password │       │ status    │       │ productId  │
-│  Hash    │       │ payment   │       │ productName│
-│ role     │       │  Method   │       │  Snapshot  │
-│ isActive │       │ totalAmt  │       │ unitPrice  │
-│          │       │ note      │       │  Snapshot  │
+│ id       │       │ id        │       │ orderId    │
+│ username │       │ orderNo   │       │ productId  │
+│ password │       │ status    │       │ productName│
+│  Hash    │       │ payment   │       │  Snapshot  │
+│ role     │       │  Method   │       │ unitPrice  │
+│ isActive │       │ totalAmt  │       │  Snapshot  │
 │          │       │ createdAt │       │ qty        │
-│          │       │ delivered │       │ modifier   │
-│          │       │  At       │       │  Text      │
-│          │       │ canceledAt│       │ lineTotal  │
-│          │       │ createdBy │       │            │
-│          │       │  Id       │       │            │
+│          │       │           │       │ lineTotal  │
 └──────────┘       └───────────┘       └────────────┘
-     │                   │
-     │              ┌────┴─────┐
-     │              │  Stock   │
-     ├──────1:N─────│ Movement │
-     │              │          │
-     │              │ productId│
-     │              │ type     │
-     │              │ qtyDelta │
-     │              │ reason   │
-     │              │ orderId  │
-     │              └──────────┘
-     │
-     │         ┌────────────┐
-     └──1:N────│ DayClosure │
-               │            │
-               │ day (uniq) │
-               │ zReport    │
-               │  Total     │
-               │ systemTotal│
-               │ difference │
-               │ hasMismatch│
-               │ totalOrders│
-               │ totalItems │
-               └────────────┘
 
-┌──────────┐
-│ Product  │
-│          │
-│ id       │
-│ name     │
-│ category │
-│ sub      │
-│  Category│
-│ basePrice│
-│ stockQty │
-│ trackStk │
-│ isActive │
-│ softDel  │
-│  etedAt  │
-└──────────┘
+┌──────────┐       ┌────────────┐       ┌──────────┐
+│ Product  │       │ DayClosure │       │  Stock   │
+│          │       │            │       │ Movement │
+│ name     │       │ day (uniq) │       │          │
+│ category │       │ zReport    │       │ productId│
+│ basePrice│       │  Total     │       │ type     │
+│ stockQty │       │ systemTotal│       │ qtyDelta │
+│ isActive │       │ hasMismatch│       │ reason   │
+└──────────┘       └────────────┘       └──────────┘
 ```
-
-### Model Detayları
-
-| Model | Kayıt Sayısı (tahmini) | Açıklama |
-|-------|----------------------|----------|
-| **User** | 5-10 | Kullanıcılar (kasiyer + admin) |
-| **Product** | 50-100 | Menü ürünleri |
-| **Order** | Günlük ~50-200 | Siparişler |
-| **OrderItem** | Sipariş başına ~1-5 | Sipariş kalemleri |
-| **StockMovement** | Sipariş bağımlı | Stok hareket logu |
-| **DayClosure** | Günlük 1 | Gün sonu kapanış kaydı |
 
 ### Enum Değerleri
 
@@ -637,36 +478,13 @@ elloi-kasa/
 | `ProductCategory` | `FOOD`, `DRINK`, `EXTRAS` |
 | `StockMovementType` | `SALE`, `ADJUSTMENT`, `RESTOCK`, `CANCEL_REVERT` |
 
-### İndeksler
+### Veri Bütünlüğü
 
-| Tablo | İndeks | Tip |
-|-------|--------|-----|
-| `User` | `username` | Unique |
-| `Product` | `isActive` | Filtreleme |
-| `Order` | `orderNo` | Unique |
-| `Order` | `status` | Filtreleme |
-| `Order` | `createdAt` | Sıralama / tarih aralığı sorgusu |
-| `OrderItem` | `orderId` | Foreign key join |
-| `OrderItem` | `productId` | Foreign key join |
-| `StockMovement` | `productId`, `orderId`, `createdAt` | Filtreleme / sıralama |
-| `DayClosure` | `day` | Unique |
-
-### Migration Stratejisi
-
-Prisma Migrate kullanılır:
-
-1. **Migration üretimi (lokal):** `npm run db:migrate:dev`
-2. **Migration uygulama (prod):** `npm run db:migrate`
-3. **Migration dosyaları:** `prisma/migrations/` altında versiyonlanır
-
-### Veri Bütünlüğü Kuralları
-
-- **Foreign key constraint'ler** migration ile veritabanında aktif
-- **Cascade delete:** `Order` silindiğinde `OrderItem` kayıtları da silinir
-- **Restrict delete:** `User` silinirse ilişkili `Order` kayıtları engeller
-- **Soft delete:** Ürünler `softDeletedAt` alanı ile pasife çekilir; geçmiş sipariş ilişkileri korunur
+- **Foreign key constraint'ler** aktif
+- **Cascade delete:** Order → OrderItem
+- **Soft delete:** Ürünler `softDeletedAt` alanı ile pasife çekilir
 - **Unique constraint:** `Order.orderNo`, `User.username`, `DayClosure.day`
-- **Snapshot bütünlüğü:** `OrderItem.productNameSnapshot` ve `unitPriceSnapshot` oluşturma anında set edilir, sonradan değişmez
+- **Snapshot bütünlüğü:** `productNameSnapshot` ve `unitPriceSnapshot` oluşturma anında set edilir
 
 ---
 
@@ -674,64 +492,60 @@ Prisma Migrate kullanılır:
 
 ### Kimlik Doğrulama
 
-- **Cookie tabanlı JWT session:** `jose` kütüphanesi ile HS256 imzalı JWT token
-- **HTTP-only cookie:** XSS saldırılarına karşı JavaScript'ten erişilemez
-- **Secure cookie:** Production'da (`NODE_ENV=production`) sadece HTTPS üzerinden gönderilir
-- **SameSite=Lax:** CSRF koruması
-- **12 saat TTL:** Session otomatik olarak 12 saat sonra sona erer
-- **Şifre hash'leme:** bcryptjs ile salt round 10
+- **Cookie tabanlı JWT session** — `jose` ile HS256 imzalı
+- **HTTP-only cookie** — XSS saldırılarına karşı JavaScript'ten erişilemez
+- **Secure cookie** — Production'da sadece HTTPS üzerinden
+- **SameSite=Lax** — CSRF koruması
+- **12 saat TTL** — Session otomatik sona erer
+- **bcrypt hash** — salt round 10
 
-### Yetkilendirme
+### Route Koruması
 
-- **Rol tabanlı erişim:** `CASHIER` ve `ADMIN` rolleri
-- **`requireSession()` guard:** Korumalı route'larda session kontrolü; oturum yoksa `/login`'e yönlendirir
-- **`requireSession("ADMIN")` guard:** Admin-only operasyonlarda (kullanıcı yönetimi, gün sonu sıfırlama) ek rol kontrolü
-- **Route group (`(protected)`):** Tüm korumalı sayfalar single layout altında session kontrolüne sahip
+- **Edge Middleware** (`src/middleware.ts`) — tüm route'larda cookie varlığını kontrol eder; cookie yoksa `/login`'e yönlendirir. Server component'ler çalışmadan önce devreye girer.
+- **`requireSession()` guard** — her Server Action ve korumalı sayfada session doğrulaması
+- **`requireSession("ADMIN")` guard** — admin-only operasyonlarda ek rol kontrolü
+
+### Brute-Force Koruması
+
+- **IP tabanlı rate limiting** — IP başına 5 login denemesi / 15 dakika penceresi
+- Limit aşılırsa Türkçe hata mesajı ile reddedilir
+- `x-forwarded-for` header üzerinden client IP tespiti
+
+### HTTP Güvenlik Başlıkları
+
+`next.config.ts` üzerinden tüm yanıtlara eklenen başlıklar:
+
+| Başlık | Değer | Koruma |
+|--------|-------|--------|
+| `X-Frame-Options` | `DENY` | Clickjacking |
+| `X-Content-Type-Options` | `nosniff` | MIME sniffing |
+| `Strict-Transport-Security` | `max-age=63072000; includeSubDomains; preload` | HTTPS zorlama |
+| `Referrer-Policy` | `strict-origin-when-cross-origin` | Referrer sızıntısı |
+| `Permissions-Policy` | `camera=(), microphone=(), geolocation=()` | Cihaz API'leri |
 
 ### Veri Doğrulama
 
 - Tüm kullanıcı girdileri **Zod şemaları** ile server-side doğrulanır
-- Kullanıcı adı: `^[a-zA-Z0-9._-]+$` regex kontrolü
-- Şifre: minimum 4 karakter
-- Ürün fiyatı: pozitif sayı kontrolü
-- Sipariş: en az 1 ürün, pozitif adet kontrolü
+- SQL injection'a karşı **Prisma parameterized queries**
+- XSS'e karşı **React auto-escaping** — `dangerouslySetInnerHTML` kullanılmaz
+- CSRF'e karşı **Next.js Server Actions** yerleşik koruma sağlar
 
-### Güvenli Dağıtım Pratikleri
+### Gizli Bilgi Yönetimi
 
 - `.env` dosyaları `.gitignore`'da — secret'lar repoya girmez
-- `SESSION_SECRET` minimum 32 karakter zorunluluğu — kısa secret ile uygulama başlamaz (`getSessionSecret()` guard)
-- Railway ortam değişkenleri gizlidir; veritabanı bağlantıları repoya girmez
+- `SESSION_SECRET` minimum 32 karakter zorunluluğu — kısa secret ile uygulama başlamaz
+- Seed kullanıcı bilgileri `SEED_USERS_JSON` env var üzerinden — kaynak kodda şifre bulunmaz
 
 ---
 
 ## 13. Sınırlamalar
 
-### Bilinen Kısıtlar
-
 | Kısıt | Açıklama |
 |-------|----------|
 | **Tek şube** | Çok şubeli yapı ve merkezi raporlama desteklenmez |
-| **Bağlantı limitleri** | Railway planına göre eşzamanlı bağlantı sayısı sınırlı olabilir |
 | **Donanım entegrasyonu yok** | Yazarkasa, barkod okuyucu, fiş yazıcısı desteği yok |
 | **Çevrimdışı çalışma yok** | PWA veya offline-first mimari yok |
-| **Test coverage** | Otomatik test suite (unit/integration) henüz eklenmemiş |
-
-### Teknik Trade-Off'lar
-
-| Trade-Off | Açıklama |
-|-----------|----------|
-| **Yönetilen DB vs Self-hosted** | Railway ile operasyonel yük azalır; ancak sağlayıcıya bağımlılık artar |
-| **Snapshot vs Normalize** | Sipariş satırlarında fiyat/ad snapshot ile tarihsel doğruluk; ancak disk kullanımı artar |
-| **Server Actions vs API Routes** | Mutation'lar için Server Actions tercih edildi; REST API tüketicileri için ayrı bir API katmanı yok |
-
-### İyileştirme Alanları
-
-- Otomatik test suite (unit test, integration test)
-- Erişilebilirlik (a11y) denetimi ve iyileştirmeleri
-- Form alanlarında daha granüler hata mesajları ve alan bazlı gösterim
-- Rate limiting ve brute-force koruması
-- Görselli ürün kataloğu (ürün fotoğrafları)
-- Performans optimizasyonu: büyük rapor sorgularında pagination
+| **Test coverage** | Otomatik test suite henüz eklenmemiş |
 
 ---
 
@@ -739,27 +553,23 @@ Prisma Migrate kullanılır:
 
 ### Kısa Vadeli
 
-- [ ] Otomatik test suite — unit test (lib fonksiyonları) ve integration test (Server Actions)
-- [ ] Admin panelinde sipariş geçmiş filtreleme ve arama
+- [ ] Otomatik test suite (unit + integration)
+- [ ] Admin panelinde sipariş filtreleme ve arama
 - [ ] Ürünlere görsel ekleme desteği
 - [ ] Fiş yazıcısı entegrasyonu (ESC/POS)
-- [ ] Kullanıcı bazlı performans raporu
 
 ### Orta Vadeli
 
 - [ ] PWA desteği — çevrimdışı sipariş kuyruklaması
-- [ ] Haftalık/aylık trend raporları ve grafik gösterimleri
-- [ ] Çoklu dil desteği (i18n)
-- [ ] Müşteri sadakat sistemi (puan/kart)
-- [ ] PostgreSQL performans ve indeks optimizasyonları
+- [ ] Haftalık/aylık trend raporları ve grafikler
+- [ ] Müşteri sadakat sistemi
 
 ### Uzun Vadeli
 
-- [ ] Çok şubeli yapı ve merkezi yönetim paneli
-- [ ] Online sipariş entegrasyonu (Getir, Yemeksepeti vb.)
-- [ ] Stok tahminleme ve otomatik sipariş önerisi
+- [ ] Çok şubeli yapı ve merkezi yönetim
+- [ ] Online sipariş entegrasyonu
 - [ ] Muhasebe / e-fatura entegrasyonu
-- [ ] Mobil native uygulama (React Native)
+- [ ] Mobil native uygulama
 
 ---
 
@@ -767,15 +577,16 @@ Prisma Migrate kullanılır:
 
 | Komut | Açıklama |
 |-------|----------|
-| `npm run dev` | Geliştirme sunucusunu başlatır (hot reload) |
-| `npm run build` | Production build oluşturur |
-| `npm run start` | Production sunucusunu başlatır |
-| `npm run start:railway` | Railway için migration uygular ve production sunucusunu başlatır |
-| `npm run lint` | ESLint ile kod kontrolü çalıştırır |
-| `npm run db:generate` | Prisma client'ı yeniden üretir |
-| `npm run db:migrate` | Prisma migration'larını prod ortamda uygular |
-| `npm run db:reset` | Veritabanını siler ve sıfırdan oluşturur |
-| `npm run db:seed` | Demo kullanıcı ve ürün verisi yükler |
+| `npm run dev` | Geliştirme sunucusu (hot reload) |
+| `npm run build` | Production build |
+| `npm run start` | Production sunucusu |
+| `npm run start:railway` | Migration + production sunucusu |
+| `npm run lint` | ESLint ile kod kontrolü |
+| `npm run db:generate` | Prisma client yeniden üretir |
+| `npm run db:migrate` | Migration'ları uygular (prod) |
+| `npm run db:migrate:dev` | Migration üretir (dev) |
+| `npm run db:reset` | Veritabanını sıfırdan oluşturur |
+| `npm run db:seed` | Kullanıcı ve ürün verisi yükler |
 
 ---
 

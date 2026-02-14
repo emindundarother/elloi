@@ -310,17 +310,17 @@ export function OrderCreateForm({ products }: { products: ProductRow[] }) {
       prev.map((item) =>
         item.productId === productId && item.category === "DRINK" && item.drinkCustomization
           ? (() => {
-              const nextCustomization = {
-                ...item.drinkCustomization,
-                [key]: value,
-              } as DrinkCustomization;
+            const nextCustomization = {
+              ...item.drinkCustomization,
+              [key]: value,
+            } as DrinkCustomization;
 
-              return {
-                ...item,
-                unitPrice: calculateDrinkUnitPrice(item.basePrice, nextCustomization),
-                drinkCustomization: nextCustomization,
-              };
-            })()
+            return {
+              ...item,
+              unitPrice: calculateDrinkUnitPrice(item.basePrice, nextCustomization),
+              drinkCustomization: nextCustomization,
+            };
+          })()
           : item,
       ),
     );
@@ -331,11 +331,11 @@ export function OrderCreateForm({ products }: { products: ProductRow[] }) {
       prev.map((item) =>
         item.productId === productId && item.category === "FOOD" && item.foodCustomization
           ? {
-              ...item,
-              foodCustomization: {
-                serviceType,
-              },
-            }
+            ...item,
+            foodCustomization: {
+              serviceType,
+            },
+          }
           : item,
       ),
     );
@@ -344,8 +344,8 @@ export function OrderCreateForm({ products }: { products: ProductRow[] }) {
   const canSubmit = cart.length > 0 && !isPending;
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
-      <section className="panel flex min-h-[65vh] flex-col p-5 sm:p-6">
+    <div className="grid items-start gap-6 lg:grid-cols-[1.15fr_0.85fr]">
+      <section className="panel flex flex-col p-5 sm:p-6">
         <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="text-lg font-semibold">Ürünler</h2>
           <input
@@ -417,13 +417,13 @@ export function OrderCreateForm({ products }: { products: ProductRow[] }) {
         </div>
       </section>
 
-      <form action={action} className="panel flex min-h-[65vh] flex-col p-5 sm:p-6">
+      <form action={action} className="panel flex flex-col p-5 sm:p-6">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold">Sepet</h2>
           <span className="muted text-xs">{cart.length} ürün</span>
         </div>
 
-        <div className="flex-1 space-y-3 overflow-y-auto">
+        <div className="flex-1 space-y-3">
           {cart.length === 0 ? (
             <p className="muted rounded-xl border border-dashed border-slate-300 p-5 text-sm">
               Ürüne dokunarak siparişe ekleyin.
@@ -591,11 +591,10 @@ export function OrderCreateForm({ products }: { products: ProductRow[] }) {
                   key={option.value}
                   type="button"
                   onClick={() => setPaymentMethod(option.value)}
-                  className={`h-9 rounded-lg text-sm transition ${
-                    paymentMethod === option.value
-                      ? "bg-[var(--primary)] font-semibold text-white"
-                      : "bg-transparent text-slate-700"
-                  }`}
+                  className={`h-9 rounded-lg text-sm transition ${paymentMethod === option.value
+                    ? "bg-[var(--primary)] font-semibold text-white"
+                    : "bg-transparent text-slate-700"
+                    }`}
                 >
                   {option.label}
                 </button>

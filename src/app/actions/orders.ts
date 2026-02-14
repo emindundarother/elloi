@@ -83,8 +83,7 @@ export async function createOrderAction(
 }
 
 export async function deliverOrderAction(orderId: string): Promise<void> {
-  const session = await requireSession();
-  await assertOrderAccess(orderId, session);
+  await requireSession();
   await deliverOrder(orderId);
 
   revalidatePath("/");

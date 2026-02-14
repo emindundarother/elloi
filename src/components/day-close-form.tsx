@@ -12,11 +12,13 @@ export function DayCloseForm({
   existingClosureId,
   dailyRevenue,
   canReset,
+  openOrderCount,
 }: {
   day: string;
   existingClosureId: string | null;
   dailyRevenue: number;
   canReset: boolean;
+  openOrderCount: number;
 }) {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
@@ -81,10 +83,22 @@ export function DayCloseForm({
 
   return (
     <>
+      {openOrderCount > 0 ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+          <p className="font-semibold">
+            {openOrderCount} aktif sipariş bulunuyor.
+          </p>
+          <p className="mt-1">
+            Günü sonlandırmak için tüm siparişlerin teslim edilmiş veya iptal edilmiş olması gerekir.
+          </p>
+        </div>
+      ) : null}
+
       <button
         type="button"
         onClick={() => setIsOpen(true)}
-        className="h-14 w-full rounded-2xl bg-[var(--primary)] px-4 text-base font-semibold text-white"
+        disabled={openOrderCount > 0}
+        className="h-14 w-full rounded-2xl bg-[var(--primary)] px-4 text-base font-semibold text-white disabled:opacity-60"
       >
         Günü Sonlandır
       </button>

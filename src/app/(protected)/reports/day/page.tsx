@@ -1,9 +1,10 @@
+import { OrderStatus } from "@prisma/client";
 import Link from "next/link";
 
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { getReportByRange } from "@/lib/reports";
-import { getTodayTR, normalizeDayInput } from "@/lib/time";
+import { getDayRangeUtc, getTodayTR, normalizeDayInput } from "@/lib/time";
 
 import { DayCloseForm } from "@/components/day-close-form";
 import { PrintButton } from "@/components/print-button";
@@ -22,6 +23,14 @@ export default async function DayReportPage({ searchParams }: DayReportPageProps
   const existingClosure = await prisma.dayClosure.findUnique({
     where: { day: selectedDay },
     select: { id: true },
+  });
+
+  const { startUtc, endUtc } = getDayRangeUtc(selectedDay);
+  const openOrderCount = await prisma.order.count({
+    where: {
+      status: OrderStatus.OPEN,
+      createdAt: { gte: startUtc, lte: endUtc },
+    },
   });
 
   return (
@@ -80,6 +89,7 @@ export default async function DayReportPage({ searchParams }: DayReportPageProps
             existingClosureId={existingClosure?.id ?? null}
             dailyRevenue={report.totalRevenue}
             canReset={session.role === "ADMIN"}
+            openOrderCount={openOrderCount}
           />
         </div>
       </section>

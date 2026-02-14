@@ -102,13 +102,12 @@ export default async function DashboardPage() {
 
                     return (
                       <tr key={order.id} className="border-t border-slate-100">
-                      <td className="px-4 py-3 font-semibold">{order.orderNo}</td>
-                      <td className="px-4 py-3">{formatTimeTR(order.createdAt)}</td>
-                      <td className="px-4 py-3">{order.createdBy.username}</td>
-                      <td className="px-4 py-3">{PAYMENT_METHOD_LABELS[order.paymentMethod]}</td>
-                      <td className="px-4 py-3 font-medium">{formatCurrencyTRY(order.totalAmount)}</td>
-                      <td className="px-4 py-3">
-                        {canManage ? (
+                        <td className="px-4 py-3 font-semibold">{order.orderNo}</td>
+                        <td className="px-4 py-3">{formatTimeTR(order.createdAt)}</td>
+                        <td className="px-4 py-3">{order.createdBy.username}</td>
+                        <td className="px-4 py-3">{PAYMENT_METHOD_LABELS[order.paymentMethod]}</td>
+                        <td className="px-4 py-3 font-medium">{formatCurrencyTRY(order.totalAmount)}</td>
+                        <td className="px-4 py-3">
                           <div className="flex gap-2">
                             <form action={deliverOrderAction.bind(null, order.id)}>
                               <button
@@ -118,20 +117,19 @@ export default async function DashboardPage() {
                                 Teslim Et
                               </button>
                             </form>
-                            <form action={cancelOrderAction.bind(null, order.id)}>
-                              <button
-                                type="submit"
-                                className="h-9 rounded-lg border border-red-300 px-3 text-xs font-semibold text-red-700"
-                              >
-                                İptal
-                              </button>
-                            </form>
+                            {canManage ? (
+                              <form action={cancelOrderAction.bind(null, order.id)}>
+                                <button
+                                  type="submit"
+                                  className="h-9 rounded-lg border border-red-300 px-3 text-xs font-semibold text-red-700"
+                                >
+                                  İptal
+                                </button>
+                              </form>
+                            ) : null}
                           </div>
-                        ) : (
-                          <span className="text-xs text-slate-400">Yetkiniz yok</span>
-                        )}
-                      </td>
-                    </tr>
+                        </td>
+                      </tr>
                     );
                   })}
                 </tbody>

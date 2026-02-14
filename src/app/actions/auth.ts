@@ -1,10 +1,12 @@
 "use server";
 
 import bcrypt from "bcryptjs";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { createSession, clearSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { loginSchema } from "@/lib/validators";
 
 type AuthFormState = {
@@ -15,6 +17,14 @@ export async function loginAction(
   _prevState: AuthFormState,
   formData: FormData,
 ): Promise<AuthFormState> {
+  const headerStore = await headers();
+  const ip = headerStore.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+  const { allowed } = checkRateLimit(`login:${ip}`);
+
+  if (!allowed) {
+    return { error: "Çok fazla giriş denemesi. 15 dakika sonra tekrar deneyin." };
+  }
+
   const parsed = loginSchema.safeParse({
     username: formData.get("username"),
     password: formData.get("password"),

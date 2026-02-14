@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { formatDateTimeTR } from "@/lib/format";
 
 import { AdminUserCreateForm } from "@/components/admin-user-create-form";
+import { DeleteUserButton } from "@/components/delete-user-button";
 
 export default async function AdminUsersPage() {
   await requireSession("ADMIN");
@@ -49,24 +50,26 @@ export default async function AdminUsersPage() {
                   <td className="px-4 py-3">{formatDateTimeTR(user.createdAt)}</td>
                   <td className="px-4 py-3">
                     <span
-                      className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${
-                        user.isActive
-                          ? "bg-emerald-100 text-emerald-700"
-                          : "bg-slate-200 text-slate-600"
-                      }`}
+                      className={`inline-flex rounded-full px-2 py-1 text-xs font-semibold ${user.isActive
+                        ? "bg-emerald-100 text-emerald-700"
+                        : "bg-slate-200 text-slate-600"
+                        }`}
                     >
                       {user.isActive ? "Aktif" : "Pasif"}
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <form action={toggleUserActiveAction.bind(null, user.id, !user.isActive)}>
-                      <button
-                        type="submit"
-                        className="h-9 rounded-lg border border-slate-300 px-3 text-xs font-semibold"
-                      >
-                        {user.isActive ? "Pasife Al" : "Aktifleştir"}
-                      </button>
-                    </form>
+                    <div className="flex items-center gap-2">
+                      <form action={toggleUserActiveAction.bind(null, user.id, !user.isActive)}>
+                        <button
+                          type="submit"
+                          className="h-9 rounded-lg border border-slate-300 px-3 text-xs font-semibold"
+                        >
+                          {user.isActive ? "Pasife Al" : "Aktifleştir"}
+                        </button>
+                      </form>
+                      <DeleteUserButton userId={user.id} />
+                    </div>
                   </td>
                 </tr>
               ))}
