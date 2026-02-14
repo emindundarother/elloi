@@ -22,6 +22,9 @@
 
 # misc
 .DS_Store
+.idea/
+eval "$(ssh-agent -s)"
+eval "$(ssh-agent -s)".pub
 *.pem
 
 # debug

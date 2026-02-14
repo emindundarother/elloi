@@ -1,33 +1,34 @@
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@prisma/client";
+import { Pool } from "pg";
 
-const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient; adapter?: PrismaBetterSqlite3 };
-type PrismaClientWithOptionalDayClosure = PrismaClient & { dayClosure?: unknown };
+const globalForPrisma = globalThis as unknown as {
+  prisma?: PrismaClient;
+  pool?: Pool;
+};
 
-function createAdapter() {
-  const url = process.env.DATABASE_URL;
-  if (!url) {
+function createPool(): Pool {
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
     throw new Error("DATABASE_URL tanımlı değil.");
   }
 
-  return new PrismaBetterSqlite3({ url });
+  return new Pool({
+    connectionString,
+  });
 }
 
-function hasDayClosureDelegate(client?: PrismaClient): boolean {
-  return Boolean(client && typeof (client as PrismaClientWithOptionalDayClosure).dayClosure !== "undefined");
-}
+const pool = globalForPrisma.pool ?? createPool();
+const adapter = new PrismaPg(pool);
 
-const adapter = globalForPrisma.adapter ?? createAdapter();
-const shouldCreateFreshClient = !globalForPrisma.prisma || !hasDayClosureDelegate(globalForPrisma.prisma);
-
-export const prisma: PrismaClient = shouldCreateFreshClient
-  ? new PrismaClient({
-      adapter,
-      log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
-    })
-  : (globalForPrisma.prisma as PrismaClient);
+export const prisma: PrismaClient =
+  globalForPrisma.prisma ??
+  new PrismaClient({
+    adapter,
+    log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
+  });
 
 if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.adapter ??= adapter;
   globalForPrisma.prisma = prisma;
+  globalForPrisma.pool = pool;
 }

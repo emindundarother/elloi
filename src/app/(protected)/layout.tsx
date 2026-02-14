@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { logoutAction } from "@/app/actions/auth";
+import { FullscreenToggle } from "@/components/fullscreen-toggle";
 import { requireSession } from "@/lib/auth";
 import { APP_NAME, ROLE_LABELS } from "@/lib/constants";
 
@@ -22,6 +23,7 @@ export default async function ProtectedLayout({
         </div>
 
         <nav className="flex flex-wrap items-center gap-2">
+          <FullscreenToggle />
           <Link href="/" className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium">
             <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M3 10.5 12 3l9 7.5" />
