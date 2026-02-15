@@ -6,37 +6,6 @@ datasource db {
   provider = "postgresql"
 }
 
-enum UserRole {
-  CASHIER
-  ADMIN
-}
-
-enum OrderStatus {
-  OPEN
-  DELIVERED
-  CANCELED
-}
-
-enum PaymentMethod {
-  CASH
-  CARD
-  METROPOL
-  EDENRED
-}
-
-enum ProductCategory {
-  FOOD
-  DRINK
-  EXTRAS
-}
-
-enum StockMovementType {
-  SALE
-  ADJUSTMENT
-  RESTOCK
-  CANCEL_REVERT
-}
-
 model User {
   id           String          @id @default(uuid())
   username     String          @unique
@@ -45,9 +14,11 @@ model User {
   isActive     Boolean         @default(true)
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
-  orders       Order[]
-  movements    StockMovement[]
   dayClosures  DayClosure[]
+  orders       Order[]
+  Session      Session[]
+  movements    StockMovement[]
+  softDeletedAt DateTime?
 }
 
 model Product {
@@ -69,17 +40,17 @@ model Product {
 }
 
 model Order {
-  id            String        @id @default(uuid())
-  orderNo       String        @unique
-  status        OrderStatus   @default(OPEN)
+  id            String          @id @default(uuid())
+  orderNo       String          @unique
+  status        OrderStatus     @default(OPEN)
   paymentMethod PaymentMethod
-  totalAmount   Decimal       @default(0)
+  totalAmount   Decimal         @default(0)
   note          String?
-  createdAt     DateTime      @default(now())
+  createdAt     DateTime        @default(now())
   deliveredAt   DateTime?
   canceledAt    DateTime?
   createdById   String
-  createdBy     User          @relation(fields: [createdById], references: [id])
+  createdBy     User            @relation(fields: [createdById], references: [id])
   items         OrderItem[]
   movements     StockMovement[]
 
@@ -113,9 +84,9 @@ model StockMovement {
   orderId     String?
   createdById String?
   createdAt   DateTime          @default(now())
-  product     Product           @relation(fields: [productId], references: [id])
-  order       Order?            @relation(fields: [orderId], references: [id])
   createdBy   User?             @relation(fields: [createdById], references: [id])
+  order       Order?            @relation(fields: [orderId], references: [id])
+  product     Product           @relation(fields: [productId], references: [id])
 
   @@index([productId])
   @@index([orderId])
@@ -123,17 +94,73 @@ model StockMovement {
 }
 
 model DayClosure {
-  id            String   @id @default(uuid())
-  day           String   @unique
-  zReportTotal  Decimal
-  systemTotal   Decimal
-  difference    Decimal
-  hasMismatch   Boolean
-  totalOrders   Int
-  totalItems    Int
-  createdAt     DateTime @default(now())
-  createdById   String
-  createdBy     User     @relation(fields: [createdById], references: [id])
+  id           String   @id @default(uuid())
+  day          String   @unique
+  zReportTotal Decimal
+  systemTotal  Decimal
+  difference   Decimal
+  hasMismatch  Boolean
+  totalOrders  Int
+  totalItems   Int
+  createdAt    DateTime @default(now())
+  createdById  String
+  createdBy    User     @relation(fields: [createdById], references: [id])
 
   @@index([createdAt])
+}
+
+model LoginThrottle {
+  id             String    @id
+  key            String    @unique
+  attempts       Int       @default(0)
+  firstAttemptAt DateTime  @default(now())
+  blockedUntil   DateTime?
+  updatedAt      DateTime
+
+  @@index([blockedUntil])
+}
+
+model Session {
+  id        String    @id
+  userId    String
+  createdAt DateTime  @default(now())
+  expiresAt DateTime
+  revokedAt DateTime?
+  ip        String?
+  userAgent String?
+  User      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@index([userId])
+}
+
+enum UserRole {
+  CASHIER
+  ADMIN
+}
+
+enum OrderStatus {
+  OPEN
+  DELIVERED
+  CANCELED
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  METROPOL
+  EDENRED
+}
+
+enum ProductCategory {
+  FOOD
+  DRINK
+  EXTRAS
+}
+
+enum StockMovementType {
+  SALE
+  ADJUSTMENT
+  RESTOCK
+  CANCEL_REVERT
 }

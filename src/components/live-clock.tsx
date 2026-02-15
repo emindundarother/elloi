@@ -4,24 +4,19 @@ import { useEffect, useState } from "react";
 import { formatDateTimeTR } from "@/lib/format";
 
 export function LiveClock() {
-    const [now, setNow] = useState<Date | null>(null);
+  const [now, setNow] = useState(() => new Date());
 
-    useEffect(() => {
-        setNow(new Date()); // client-side hydration fix
-        const timer = setInterval(() => {
-            setNow(new Date());
-        }, 1000);
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNow(new Date());
+    }, 1000);
 
-        return () => clearInterval(timer);
-    }, []);
+    return () => clearInterval(timer);
+  }, []);
 
-    if (!now) {
-        return (
-            <span className="opacity-0" aria-hidden="true">
-                ...
-            </span>
-        );
-    }
-
-    return <>{formatDateTimeTR(now)}</>;
+  return (
+    <time dateTime={now.toISOString()} suppressHydrationWarning>
+      {formatDateTimeTR(now)}
+    </time>
+  );
 }

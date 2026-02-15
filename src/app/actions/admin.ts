@@ -442,23 +442,49 @@ export async function deleteUserAction(
     return { error: "Kendi hesabınızı silemezsiniz.", success: null };
   }
 
-  const orderCount = await prisma.order.count({
-    where: { createdById: userId },
+  return await deleteUserCore(userId);
+}
+
+export async function deleteUserCore(userId: string): Promise<AdminActionState> {
+  const openOrderCount = await prisma.order.count({
+    where: {
+      createdById: userId,
+      status: "OPEN",
+    },
   });
 
-  if (orderCount > 0) {
+  if (openOrderCount > 0) {
     return {
-      error: `Bu kullanıcının ${orderCount} siparişi var. Silmek yerine pasife alın.`,
+      error: `Bu kullanıcının ${openOrderCount} açık siparişi var. Önce siparişleri tamamlayın veya iptal edin.`,
       success: null,
     };
   }
 
-  await prisma.$transaction(async (tx) => {
-    await tx.stockMovement.deleteMany({ where: { createdById: userId } });
-    await tx.dayClosure.deleteMany({ where: { createdById: userId } });
-    await tx.user.delete({ where: { id: userId } });
-  });
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { username: true },
+    });
 
-  revalidatePath("/admin/users");
-  return { error: null, success: "Kullanıcı silindi." };
+    if (!user) {
+      return { error: "Kullanıcı bulunamadı.", success: null };
+    }
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        isActive: false,
+        softDeletedAt: new Date(),
+        username: `${user.username}_deleted_${Date.now()}`,
+      },
+    });
+
+    try {
+      revalidatePath("/admin/users");
+    } catch { }
+    return { error: null, success: "Kullanıcı silindi." };
+  } catch (error) {
+    console.error("deleteUserAction failed", error);
+    return { error: "Kullanıcı silinemedi.", success: null };
+  }
 }

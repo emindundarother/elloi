@@ -12,6 +12,7 @@ export default async function AdminUsersPage() {
 
   const users = await prisma.user.findMany({
     orderBy: [{ role: "desc" }, { username: "asc" }],
+    where: { softDeletedAt: null },
     select: {
       id: true,
       username: true,
