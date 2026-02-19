@@ -19,10 +19,17 @@ const orderItemSchema = z.object({
   milkType: z.enum(["NORMAL_SUT", "LAKTOZSUZ_SUT", "BADEM_SUTU", "YULAF_SUTU", "SUTSUZ"]).optional(),
 });
 
-export const createOrderSchema = z.object({
+const paymentEntrySchema = z.object({
   paymentMethod: z.nativeEnum(PaymentMethod),
+  amount: z.coerce.number().positive("Ödeme tutarı 0'dan büyük olmalı."),
+  note: z.string().trim().max(120).optional().or(z.literal("")),
+  itemIndices: z.array(z.number().int().min(0)).optional(),
+});
+
+export const createOrderSchema = z.object({
   note: z.string().trim().max(120).optional().or(z.literal("")),
   items: z.array(orderItemSchema).min(1, "Sepet boş olamaz."),
+  payments: z.array(paymentEntrySchema).min(1, "En az bir ödeme yöntemi seçilmeli."),
 });
 
 const productCategorySchema = z.enum(["FOOD", "DRINK", "EXTRAS"], {

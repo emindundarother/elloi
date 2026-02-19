@@ -53,7 +53,13 @@ export async function GET(request: NextRequest) {
         order.createdAt.toISOString(),
         order.deliveredAt ? order.deliveredAt.toISOString() : "",
         order.createdByUsername,
-        PAYMENT_METHOD_LABELS[order.paymentMethod],
+        order.payments.length > 0
+          ? order.payments
+            .map((p) => `${PAYMENT_METHOD_LABELS[p.paymentMethod]}: ${p.amount.toFixed(2)}`)
+            .join("; ")
+          : order.paymentMethod
+            ? PAYMENT_METHOD_LABELS[order.paymentMethod]
+            : "-",
         order.totalAmount.toFixed(2),
         item.productNameSnapshot,
         item.qty.toString(),

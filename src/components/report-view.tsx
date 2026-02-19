@@ -93,7 +93,15 @@ export function ReportView({
                   <div>
                     <p className="font-semibold">{order.orderNo}</p>
                     <p className="muted text-xs">
-                      {formatDateTimeTR(order.createdAt)} • {PAYMENT_METHOD_LABELS[order.paymentMethod]} • {order.status}
+                      {formatDateTimeTR(order.createdAt)} •{" "}
+                      {order.payments.length > 0
+                        ? order.payments
+                          .map((p) => `${PAYMENT_METHOD_LABELS[p.paymentMethod]}: ${formatCurrencyTRY(p.amount)}`)
+                          .join(", ")
+                        : order.paymentMethod
+                          ? PAYMENT_METHOD_LABELS[order.paymentMethod]
+                          : "-"}{" "}
+                      • {order.status}
                     </p>
                     <p className="muted text-xs">Kasiyer: {order.createdByUsername}</p>
                   </div>

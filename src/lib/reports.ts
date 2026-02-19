@@ -6,6 +6,12 @@ import { getRangeUtc } from "./time";
 
 type PaymentTotals = Record<PaymentMethod, number>;
 
+export type ReportPayment = {
+  paymentMethod: PaymentMethod;
+  amount: number;
+  note: string | null;
+};
+
 export type ReportOrderItem = {
   id: string;
   productNameSnapshot: string;
@@ -18,7 +24,8 @@ export type ReportOrder = {
   id: string;
   orderNo: string;
   status: OrderStatus;
-  paymentMethod: PaymentMethod;
+  paymentMethod: PaymentMethod | null;
+  payments: ReportPayment[];
   createdById: string;
   createdByUsername: string;
   totalAmount: number;
@@ -69,6 +76,9 @@ export async function getReportByRange(startDay?: string | null, endDay?: string
       items: {
         orderBy: { createdAt: "asc" },
       },
+      payments: {
+        orderBy: { createdAt: "asc" },
+      },
     },
   });
 
@@ -85,7 +95,16 @@ export async function getReportByRange(startDay?: string | null, endDay?: string
   const orders: ReportOrder[] = rows.map((order) => {
     const orderTotal = toNumber(order.totalAmount);
     totalRevenue += orderTotal;
-    paymentTotals[order.paymentMethod] += orderTotal;
+
+    // Split payment: use OrderPayment records if available, otherwise fallback to legacy field
+    if (order.payments.length > 0) {
+      for (const payment of order.payments) {
+        const paymentAmount = toNumber(payment.amount);
+        paymentTotals[payment.paymentMethod] += paymentAmount;
+      }
+    } else if (order.paymentMethod) {
+      paymentTotals[order.paymentMethod] += orderTotal;
+    }
 
     const items: ReportOrderItem[] = order.items.map((item) => {
       const lineTotal = toNumber(item.lineTotal);
@@ -111,11 +130,18 @@ export async function getReportByRange(startDay?: string | null, endDay?: string
       };
     });
 
+    const payments: ReportPayment[] = order.payments.map((p) => ({
+      paymentMethod: p.paymentMethod,
+      amount: toNumber(p.amount),
+      note: p.note,
+    }));
+
     return {
       id: order.id,
       orderNo: order.orderNo,
       status: order.status,
       paymentMethod: order.paymentMethod,
+      payments,
       createdById: order.createdById,
       createdByUsername: order.createdBy.username,
       totalAmount: orderTotal,
@@ -135,3 +161,4 @@ export async function getReportByRange(startDay?: string | null, endDay?: string
     orders,
   };
 }
+

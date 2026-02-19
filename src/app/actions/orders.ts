@@ -1,6 +1,5 @@
 "use server";
 
-import { PaymentMethod } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -30,7 +29,7 @@ async function assertOrderAccess(orderId: string, session: SessionUser): Promise
   }
 }
 
-function parseItems(payload: FormDataEntryValue | null): unknown {
+function parseJson(payload: FormDataEntryValue | null): unknown {
   if (typeof payload !== "string") return [];
 
   try {
@@ -47,9 +46,9 @@ export async function createOrderAction(
   const session = await requireSession();
 
   const parsed = createOrderSchema.safeParse({
-    paymentMethod: formData.get("paymentMethod") as PaymentMethod,
     note: formData.get("note"),
-    items: parseItems(formData.get("itemsJson")),
+    items: parseJson(formData.get("itemsJson")),
+    payments: parseJson(formData.get("paymentsJson")),
   });
 
   if (!parsed.success) {
@@ -58,7 +57,7 @@ export async function createOrderAction(
 
   try {
     await createOrder({
-      paymentMethod: parsed.data.paymentMethod,
+      payments: parsed.data.payments,
       note: parsed.data.note,
       items: parsed.data.items,
       createdById: session.userId,

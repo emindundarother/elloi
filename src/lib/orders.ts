@@ -20,8 +20,15 @@ type CreateOrderItemInput = {
   milkType?: MilkType;
 };
 
-type CreateOrderInput = {
+type PaymentEntryInput = {
   paymentMethod: PaymentMethod;
+  amount: number;
+  note?: string;
+  itemIndices?: number[];
+};
+
+type CreateOrderInput = {
+  payments: PaymentEntryInput[];
   note?: string;
   items: CreateOrderItemInput[];
   createdById: string;
@@ -164,11 +171,14 @@ async function createOrderTxn(
     }
   }
 
+  const isItemLevel = input.payments.some((p) => p.itemIndices && p.itemIndices.length > 0);
+
+  // --- Step 1: create order + items (without payment links yet) ---
   const order = await tx.order.create({
     data: {
       orderNo,
       status: OrderStatus.OPEN,
-      paymentMethod: input.paymentMethod,
+      paymentMethod: null,
       totalAmount,
       note: cleanModifier(input.note),
       createdById: input.createdById,
@@ -176,8 +186,63 @@ async function createOrderTxn(
         create: itemRows,
       },
     },
-    select: { id: true, orderNo: true },
+    select: {
+      id: true,
+      orderNo: true,
+      items: { select: { id: true, lineTotal: true }, orderBy: { createdAt: "asc" } },
+    },
   });
+
+  // --- Step 2: create payments & link items ---
+  for (const p of input.payments) {
+    let paymentAmount: Prisma.Decimal;
+
+    if (isItemLevel && p.itemIndices && p.itemIndices.length > 0) {
+      // Item-level: amount is the sum of linked items' lineTotals
+      paymentAmount = p.itemIndices.reduce(
+        (sum, idx) => sum.add(order.items[idx]?.lineTotal ?? new Prisma.Decimal(0)),
+        new Prisma.Decimal(0),
+      );
+    } else {
+      paymentAmount = new Prisma.Decimal(p.amount.toFixed(2));
+    }
+
+    const payment = await tx.orderPayment.create({
+      data: {
+        orderId: order.id,
+        paymentMethod: p.paymentMethod,
+        amount: paymentAmount,
+        note: cleanModifier(p.note),
+      },
+    });
+
+    // Link items to their payment
+    if (isItemLevel && p.itemIndices && p.itemIndices.length > 0) {
+      const itemIds = p.itemIndices.map((idx) => order.items[idx]?.id).filter(Boolean) as string[];
+      if (itemIds.length > 0) {
+        await tx.orderItem.updateMany({
+          where: { id: { in: itemIds } },
+          data: { orderPaymentId: payment.id },
+        });
+      }
+    }
+  }
+
+  // --- Step 3: validate payment total matches order total ---
+  const createdPayments = await tx.orderPayment.findMany({
+    where: { orderId: order.id },
+    select: { amount: true },
+  });
+  const paymentSumDecimal = createdPayments.reduce(
+    (sum, pp) => sum.add(pp.amount),
+    new Prisma.Decimal(0),
+  );
+
+  if (!paymentSumDecimal.equals(totalAmount)) {
+    throw new Error(
+      `Ödeme toplamı (${paymentSumDecimal}) sipariş toplamıyla (${totalAmount}) eşleşmiyor.`,
+    );
+  }
 
   for (const [productId, qty] of stockNeeds.entries()) {
     await tx.stockMovement.create({
@@ -312,6 +377,12 @@ export async function listOpenOrders() {
       createdBy: {
         select: {
           username: true,
+        },
+      },
+      payments: {
+        select: {
+          paymentMethod: true,
+          amount: true,
         },
       },
     },

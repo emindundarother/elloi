@@ -45,6 +45,12 @@ export default async function DashboardPage() {
           username: true,
         },
       },
+      payments: {
+        select: {
+          paymentMethod: true,
+          amount: true,
+        },
+      },
     },
   });
 
@@ -106,7 +112,15 @@ export default async function DashboardPage() {
                         <td className="px-4 py-3 font-semibold">{order.orderNo}</td>
                         <td className="px-4 py-3">{formatTimeTR(order.createdAt)}</td>
                         <td className="px-4 py-3">{order.createdBy.username}</td>
-                        <td className="px-4 py-3">{PAYMENT_METHOD_LABELS[order.paymentMethod]}</td>
+                        <td className="px-4 py-3">
+                          {order.payments.length > 0
+                            ? order.payments
+                              .map((p) => `${PAYMENT_METHOD_LABELS[p.paymentMethod]}: ${formatCurrencyTRY(p.amount)}`)
+                              .join(", ")
+                            : order.paymentMethod
+                              ? PAYMENT_METHOD_LABELS[order.paymentMethod]
+                              : "-"}
+                        </td>
                         <td className="px-4 py-3 font-medium">{formatCurrencyTRY(order.totalAmount)}</td>
                         <td className="px-4 py-3">
                           <div className="flex gap-2">
@@ -170,7 +184,15 @@ export default async function DashboardPage() {
                       <td className="px-4 py-3">{statusLabel}</td>
                       <td className="px-4 py-3">{formatTimeTR(actionTime ?? order.createdAt)}</td>
                       <td className="px-4 py-3">{order.createdBy.username}</td>
-                      <td className="px-4 py-3">{PAYMENT_METHOD_LABELS[order.paymentMethod]}</td>
+                      <td className="px-4 py-3">
+                        {order.payments.length > 0
+                          ? order.payments
+                            .map((p) => `${PAYMENT_METHOD_LABELS[p.paymentMethod]}: ${formatCurrencyTRY(p.amount)}`)
+                            .join(", ")
+                          : order.paymentMethod
+                            ? PAYMENT_METHOD_LABELS[order.paymentMethod]
+                            : "-"}
+                      </td>
                       <td className="px-4 py-3 font-medium">{formatCurrencyTRY(order.totalAmount)}</td>
                     </tr>
                   );

@@ -60,12 +60,25 @@ type CartItem = {
 
 type PaymentMethod = "CASH" | "CARD" | "METROPOL" | "EDENRED";
 
+type PaymentEntry = {
+  id: string;
+  paymentMethod: PaymentMethod;
+  amount: number;
+  itemIndices?: number[];
+};
+
 const paymentOptions: Array<{ value: PaymentMethod; label: string }> = [
   { value: "CARD", label: "Kredi Kartı" },
   { value: "CASH", label: "Nakit" },
   { value: "METROPOL", label: "Metropol Kart" },
   { value: "EDENRED", label: "Ticket Edenred" },
 ];
+
+let paymentIdCounter = 0;
+function nextPaymentId(): string {
+  paymentIdCounter += 1;
+  return `pay-${paymentIdCounter}`;
+}
 
 const productCategoryLabels: Record<ProductCategory, string> = {
   FOOD: "Yiyecek",
@@ -174,9 +187,17 @@ export function OrderCreateForm({ products }: { products: ProductRow[] }) {
   const [search, setSearch] = useState("");
   const [openGroup, setOpenGroup] = useState<ProductSubCategory | null>(null);
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("CASH");
+  const [payments, setPayments] = useState<PaymentEntry[]>([
+    { id: nextPaymentId(), paymentMethod: "CASH", amount: 0 },
+  ]);
   const [localError, setLocalError] = useState<string | null>(null);
   const [state, action, isPending] = useActionState(createOrderAction, { error: null });
+
+  // Item-level payment state
+  const [isItemLevelPayment, setIsItemLevelPayment] = useState(false);
+  const [selectedItemIndices, setSelectedItemIndices] = useState<Set<number>>(new Set());
+  const [selectedItemQtys, setSelectedItemQtys] = useState<Map<number, number>>(new Map());
+  const [itemAssignMethod, setItemAssignMethod] = useState<PaymentMethod>("CARD");
 
   useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -230,6 +251,182 @@ export function OrderCreateForm({ products }: { products: ProductRow[] }) {
       })),
     );
   }, [cart]);
+
+  const paymentTotal = useMemo(() => {
+    return payments.reduce((acc, p) => acc + p.amount, 0);
+  }, [payments]);
+
+  const paymentMismatch = cart.length > 0 && Math.abs(paymentTotal - totalAmount) > 0.009;
+
+  // For item-level mode: check all items are assigned
+  const unassignedItemIndices = useMemo(() => {
+    if (!isItemLevelPayment) return [];
+    const assignedSet = new Set(payments.flatMap((p) => p.itemIndices ?? []));
+    return cart.map((_, i) => i).filter((i) => !assignedSet.has(i));
+  }, [isItemLevelPayment, payments, cart]);
+
+  const itemLevelMismatch = isItemLevelPayment && cart.length > 0 && unassignedItemIndices.length > 0;
+
+  const serializedPayments = useMemo(() => {
+    return JSON.stringify(
+      payments
+        .filter((p) => p.amount > 0)
+        .map((p) => ({
+          paymentMethod: p.paymentMethod,
+          amount: p.amount,
+          ...(p.itemIndices && p.itemIndices.length > 0 ? { itemIndices: p.itemIndices } : {}),
+        })),
+    );
+  }, [payments]);
+
+  const addPaymentEntry = () => {
+    setPayments((prev) => [
+      ...prev,
+      { id: nextPaymentId(), paymentMethod: "CASH", amount: 0 },
+    ]);
+  };
+
+  const removePaymentEntry = (id: string) => {
+    setPayments((prev) => {
+      if (prev.length <= 1) return prev;
+      return prev.filter((p) => p.id !== id);
+    });
+  };
+
+  const updatePaymentEntry = (id: string, field: "paymentMethod" | "amount", value: string | number) => {
+    setPayments((prev) =>
+      prev.map((p) =>
+        p.id === id
+          ? {
+            ...p,
+            [field]: field === "amount" ? Number(value) || 0 : value,
+          }
+          : p,
+      ),
+    );
+  };
+
+  const setFullAmountPayment = (method: PaymentMethod) => {
+    if (isItemLevelPayment) {
+      // In item-level mode: assign ALL items to this method
+      const allIndices = cart.map((_, i) => i);
+      const amount = cart.reduce((sum, item) => sum + item.unitPrice * item.qty, 0);
+      setPayments([{ id: nextPaymentId(), paymentMethod: method, amount, itemIndices: allIndices }]);
+      setSelectedItemIndices(new Set());
+    } else {
+      setPayments([{ id: nextPaymentId(), paymentMethod: method, amount: totalAmount }]);
+    }
+  };
+
+  const toggleItemSelection = (index: number) => {
+    setSelectedItemIndices((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) {
+        next.delete(index);
+        setSelectedItemQtys((qm) => {
+          const nq = new Map(qm);
+          nq.delete(index);
+          return nq;
+        });
+      } else {
+        next.add(index);
+        const item = cart[index];
+        if (item) {
+          setSelectedItemQtys((qm) => new Map(qm).set(index, item.qty));
+        }
+      }
+      return next;
+    });
+  };
+
+  const changeSelectedQty = (index: number, qty: number) => {
+    const item = cart[index];
+    if (!item) return;
+    const clamped = Math.max(1, Math.min(qty, item.qty));
+    setSelectedItemQtys((qm) => new Map(qm).set(index, clamped));
+  };
+
+  const assignSelectedItems = () => {
+    if (selectedItemIndices.size === 0) return;
+
+    // Sort indices descending so splicing doesn't shift later indices
+    const indices = Array.from(selectedItemIndices).sort((a, b) => b - a);
+
+    // Compute new cart from current cart (outside of setCart updater)
+    const nextCart = [...cart];
+    const newIndices: number[] = [];
+
+    for (const idx of indices) {
+      const item = nextCart[idx];
+      if (!item) continue;
+
+      const selQty = selectedItemQtys.get(idx) ?? item.qty;
+
+      if (selQty < item.qty) {
+        // Split: update original to selected qty, insert remainder after it
+        nextCart[idx] = { ...item, qty: selQty };
+        const remainderItem: CartItem = { ...item, qty: item.qty - selQty };
+        nextCart.splice(idx + 1, 0, remainderItem);
+        newIndices.push(idx);
+      } else {
+        // Full qty selected — no split needed
+        newIndices.push(idx);
+      }
+    }
+
+    // Build old→new index mapping for existing payments
+    const oldToNew = new Map<number, number>();
+    let offset = 0;
+    for (let i = 0; i < cart.length; i++) {
+      oldToNew.set(i, i + offset);
+      if (selectedItemIndices.has(i)) {
+        const selQty = selectedItemQtys.get(i) ?? cart[i].qty;
+        if (selQty < cart[i].qty) {
+          offset += 1; // an extra row was inserted after this index
+        }
+      }
+    }
+
+    const finalIndices = newIndices.sort((a, b) => a - b);
+    const mappedFinalIndices = finalIndices.map((oi) => oldToNew.get(oi) ?? oi);
+
+    // Calculate amount from the new cart
+    const amount = mappedFinalIndices.reduce((sum, idx) => {
+      const ci = nextCart[idx];
+      return ci ? sum + ci.unitPrice * ci.qty : sum;
+    }, 0);
+
+    // Set cart and payments as separate state updates (NOT nested)
+    setCart(nextCart);
+
+    setPayments((prevPayments) => {
+      const remapped = prevPayments.map((p) => {
+        if (!p.itemIndices || p.itemIndices.length === 0) return p;
+        return {
+          ...p,
+          itemIndices: p.itemIndices.map((oi) => oldToNew.get(oi) ?? oi),
+        };
+      });
+      return [
+        ...remapped,
+        { id: nextPaymentId(), paymentMethod: itemAssignMethod, amount, itemIndices: mappedFinalIndices },
+      ];
+    });
+
+    setSelectedItemIndices(new Set());
+    setSelectedItemQtys(new Map());
+  };
+
+  const removeItemLevelPayment = (paymentId: string) => {
+    setPayments((prev) => prev.filter((p) => p.id !== paymentId));
+  };
+
+  const toggleItemLevelPayment = (checked: boolean) => {
+    setIsItemLevelPayment(checked);
+    setSelectedItemIndices(new Set());
+    setSelectedItemQtys(new Map());
+    setPayments([{ id: nextPaymentId(), paymentMethod: "CASH", amount: checked ? 0 : totalAmount }]);
+  };
 
   const addToCart = (product: ProductRow) => {
     setLocalError(null);
@@ -341,7 +538,8 @@ export function OrderCreateForm({ products }: { products: ProductRow[] }) {
     );
   };
 
-  const canSubmit = cart.length > 0 && !isPending;
+  const canSubmit = cart.length > 0 && !isPending && paymentTotal > 0 &&
+    (isItemLevelPayment ? !itemLevelMismatch : !paymentMismatch);
 
   return (
     <div className="grid items-start gap-6 lg:grid-cols-[1.15fr_0.85fr]">
@@ -429,177 +627,387 @@ export function OrderCreateForm({ products }: { products: ProductRow[] }) {
               Ürüne dokunarak siparişe ekleyin.
             </p>
           ) : (
-            cart.map((item) => (
-              <article key={item.productId} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="font-medium">{item.name}</p>
-                    <p className="muted text-xs">{formatCurrencyTRY(item.unitPrice)}</p>
-                  </div>
+            (() => {
+              // In item-level mode, sort: assigned items first, unassigned at bottom
+              const renderOrder = cart.map((item, cartIndex) => ({ item, cartIndex }));
+              if (isItemLevelPayment) {
+                renderOrder.sort((a, b) => {
+                  const aAssigned = payments.some((p) => p.itemIndices?.includes(a.cartIndex));
+                  const bAssigned = payments.some((p) => p.itemIndices?.includes(b.cartIndex));
+                  if (aAssigned === bAssigned) return a.cartIndex - b.cartIndex;
+                  return aAssigned ? -1 : 1;
+                });
+              }
+              return renderOrder;
+            })().map(({ item, cartIndex }) => {
+              // Find which payment group this item belongs to (item-level mode)
+              const assignedPayment = isItemLevelPayment
+                ? payments.find((p) => p.itemIndices?.includes(cartIndex))
+                : null;
+              const isAssigned = !!assignedPayment;
+              const isSelected = selectedItemIndices.has(cartIndex);
 
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => changeQty(item.productId, item.qty - 1)}
-                      className="h-8 w-8 rounded-lg border border-slate-300 bg-white"
-                    >
-                      -
-                    </button>
-                    <span className="w-8 text-center text-sm font-semibold">{item.qty}</span>
-                    <button
-                      type="button"
-                      onClick={() => changeQty(item.productId, item.qty + 1)}
-                      className="h-8 w-8 rounded-lg border border-slate-300 bg-white"
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-
-                {item.category === "DRINK" && item.drinkCustomization ? (
-                  <div className="mt-3 space-y-2 rounded-lg border border-slate-200 bg-white p-3">
-                    <p className="text-xs font-semibold text-slate-600">Özelleştirme</p>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      <label className="text-xs text-slate-600">
-                        <span className="mb-1 block">0. seçenek - Boyut</span>
-                        <select
-                          value={item.drinkCustomization.size}
-                          onChange={(event) =>
-                            changeDrinkCustomization(item.productId, "size", event.target.value as DrinkSize)
-                          }
-                          className="h-9 w-full rounded-lg border border-slate-300 px-2 text-sm"
-                        >
-                          <option value="SMALL">Küçük</option>
-                          <option value="LARGE">Büyük (+{DRINK_LARGE_SIZE_EXTRA} TL)</option>
-                        </select>
-                      </label>
-
-                      <label className="text-xs text-slate-600">
-                        <span className="mb-1 block">1. seçenek - Mekanda/Takeaway</span>
-                        <select
-                          value={item.drinkCustomization.serviceType}
-                          onChange={(event) =>
-                            changeDrinkCustomization(
-                              item.productId,
-                              "serviceType",
-                              event.target.value as DrinkServiceType,
-                            )
-                          }
-                          className="h-9 w-full rounded-lg border border-slate-300 px-2 text-sm"
-                        >
-                          <option value="MEKANDA">Mekanda</option>
-                          <option value="TAKEAWAY">Takeaway</option>
-                        </select>
-                      </label>
-
-                      <label className="text-xs text-slate-600">
-                        <span className="mb-1 block">2. seçenek - Sıcak/Soğuk</span>
-                        <select
-                          value={item.drinkCustomization.temperature}
-                          onChange={(event) =>
-                            changeDrinkCustomization(
-                              item.productId,
-                              "temperature",
-                              event.target.value as DrinkTemperature,
-                            )
-                          }
-                          className="h-9 w-full rounded-lg border border-slate-300 px-2 text-sm"
-                        >
-                          <option value="SICAK">Sıcak</option>
-                          <option value="SOGUK">Soğuk</option>
-                        </select>
-                      </label>
-
-                      <label className="text-xs text-slate-600">
-                        <span className="mb-1 block">3. seçenek - Süt tipi</span>
-                        <select
-                          value={item.drinkCustomization.milkType}
-                          onChange={(event) =>
-                            changeDrinkCustomization(item.productId, "milkType", event.target.value as MilkType)
-                          }
-                          className="h-9 w-full rounded-lg border border-slate-300 px-2 text-sm"
-                        >
-                          <option value="NORMAL_SUT">Normal süt</option>
-                          <option value="LAKTOZSUZ_SUT">Laktozsuz süt</option>
-                          <option value="BADEM_SUTU">Badem sütü (+{DRINK_PLANT_BASED_MILK_EXTRA} TL)</option>
-                          <option value="YULAF_SUTU">Yulaf sütü (+{DRINK_PLANT_BASED_MILK_EXTRA} TL)</option>
-                          <option value="SUTSUZ">Sütsüz</option>
-                        </select>
-                      </label>
-
-                      <label className="text-xs text-slate-600">
-                        <span className="mb-1 block">4. seçenek - Krema</span>
-                        <select
-                          value={item.drinkCustomization.cream}
-                          onChange={(event) =>
-                            changeDrinkCustomization(
-                              item.productId,
-                              "cream",
-                              event.target.value as CreamPreference,
-                            )
-                          }
-                          className="h-9 w-full rounded-lg border border-slate-300 px-2 text-sm"
-                        >
-                          <option value="KREMA_OLSUN">Krema olsun</option>
-                          <option value="KREMA_OLMASIN">Krema olmasın</option>
-                        </select>
-                      </label>
-
-                      <label className="text-xs text-slate-600 sm:col-span-2">
-                        <span className="mb-1 block">5. seçenek - Ekstralar</span>
-                        <select
-                          value={item.drinkCustomization.extra}
-                          onChange={(event) =>
-                            changeDrinkCustomization(item.productId, "extra", event.target.value as DrinkExtra)
-                          }
-                          className="h-9 w-full rounded-lg border border-slate-300 px-2 text-sm"
-                        >
-                          <option value="EKSTRA_BUZLU">Ekstra buzlu</option>
-                          <option value="EKSTRA_SUTLU">Ekstra sütlü</option>
-                        </select>
-                      </label>
+              return (
+                <article
+                  key={`${item.productId}-${cartIndex}`}
+                  className={`rounded-xl border p-3 transition ${isItemLevelPayment && isAssigned
+                    ? "border-green-300 bg-green-50"
+                    : isItemLevelPayment && isSelected
+                      ? "border-blue-300 bg-blue-50"
+                      : "border-slate-200 bg-slate-50"
+                    }`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      {isItemLevelPayment && !isAssigned ? (
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleItemSelection(cartIndex)}
+                          className="h-4 w-4 rounded accent-blue-600"
+                        />
+                      ) : null}
+                      {isItemLevelPayment && isAssigned && assignedPayment ? (
+                        <span className="inline-flex h-5 items-center rounded bg-green-600 px-1.5 text-[10px] font-bold text-white">
+                          {paymentOptions.find((o) => o.value === assignedPayment.paymentMethod)?.label ?? assignedPayment.paymentMethod}
+                        </span>
+                      ) : null}
+                      <div>
+                        <p className="font-medium">{item.name}</p>
+                        <p className="muted text-xs">{formatCurrencyTRY(item.unitPrice)}</p>
+                      </div>
                     </div>
-                  </div>
-                ) : null}
 
-                {item.category === "FOOD" && item.foodCustomization ? (
-                  <div className="mt-3 space-y-2 rounded-lg border border-slate-200 bg-white p-3">
-                    <p className="text-xs font-semibold text-slate-600">Servis tipi</p>
-                    <select
-                      value={item.foodCustomization.serviceType}
-                      onChange={(event) =>
-                        changeFoodCustomization(item.productId, event.target.value as FoodServiceType)
-                      }
-                      className="h-9 w-full rounded-lg border border-slate-300 px-2 text-sm"
-                    >
-                      <option value="SICAK">Sıcak</option>
-                      <option value="SOGUK">Soğuk</option>
-                    </select>
+                    {/* Qty controls: hide when item-level assigned, show stepper for selection */}
+                    {isItemLevelPayment && isAssigned ? (
+                      <span className="text-sm font-semibold text-green-700">{item.qty}×</span>
+                    ) : isItemLevelPayment && isSelected && item.qty > 1 ? (
+                      /* Partial qty stepper for multi-qty items */
+                      <div className="flex items-center gap-1">
+                        <span className="text-[10px] text-slate-500 mr-1">Adet:</span>
+                        <button
+                          type="button"
+                          onClick={() => changeSelectedQty(cartIndex, (selectedItemQtys.get(cartIndex) ?? item.qty) - 1)}
+                          className="h-7 w-7 rounded-md border border-blue-300 bg-blue-50 text-xs font-bold text-blue-700"
+                        >
+                          −
+                        </button>
+                        <span className="w-6 text-center text-sm font-semibold text-blue-700">
+                          {selectedItemQtys.get(cartIndex) ?? item.qty}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => changeSelectedQty(cartIndex, (selectedItemQtys.get(cartIndex) ?? item.qty) + 1)}
+                          className="h-7 w-7 rounded-md border border-blue-300 bg-blue-50 text-xs font-bold text-blue-700"
+                        >
+                          +
+                        </button>
+                        <span className="text-[10px] text-slate-400">/ {item.qty}</span>
+                      </div>
+                    ) : isItemLevelPayment ? (
+                      <span className="text-sm font-semibold">{item.qty}×</span>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => changeQty(item.productId, item.qty - 1)}
+                          className="h-8 w-8 rounded-lg border border-slate-300 bg-white"
+                        >
+                          -
+                        </button>
+                        <span className="w-8 text-center text-sm font-semibold">{item.qty}</span>
+                        <button
+                          type="button"
+                          onClick={() => changeQty(item.productId, item.qty + 1)}
+                          className="h-8 w-8 rounded-lg border border-slate-300 bg-white"
+                        >
+                          +
+                        </button>
+                      </div>
+                    )}
                   </div>
-                ) : null}
-              </article>
-            ))
+
+                  {item.category === "DRINK" && item.drinkCustomization ? (
+                    <div className="mt-3 space-y-2 rounded-lg border border-slate-200 bg-white p-3">
+                      <p className="text-xs font-semibold text-slate-600">Özelleştirme</p>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <label className="text-xs text-slate-600">
+                          <span className="mb-1 block">0. seçenek - Boyut</span>
+                          <select
+                            value={item.drinkCustomization.size}
+                            onChange={(event) =>
+                              changeDrinkCustomization(item.productId, "size", event.target.value as DrinkSize)
+                            }
+                            className="h-9 w-full rounded-lg border border-slate-300 px-2 text-sm"
+                          >
+                            <option value="SMALL">Küçük</option>
+                            <option value="LARGE">Büyük (+{DRINK_LARGE_SIZE_EXTRA} TL)</option>
+                          </select>
+                        </label>
+
+                        <label className="text-xs text-slate-600">
+                          <span className="mb-1 block">1. seçenek - Mekanda/Takeaway</span>
+                          <select
+                            value={item.drinkCustomization.serviceType}
+                            onChange={(event) =>
+                              changeDrinkCustomization(
+                                item.productId,
+                                "serviceType",
+                                event.target.value as DrinkServiceType,
+                              )
+                            }
+                            className="h-9 w-full rounded-lg border border-slate-300 px-2 text-sm"
+                          >
+                            <option value="MEKANDA">Mekanda</option>
+                            <option value="TAKEAWAY">Takeaway</option>
+                          </select>
+                        </label>
+
+                        <label className="text-xs text-slate-600">
+                          <span className="mb-1 block">2. seçenek - Sıcak/Soğuk</span>
+                          <select
+                            value={item.drinkCustomization.temperature}
+                            onChange={(event) =>
+                              changeDrinkCustomization(
+                                item.productId,
+                                "temperature",
+                                event.target.value as DrinkTemperature,
+                              )
+                            }
+                            className="h-9 w-full rounded-lg border border-slate-300 px-2 text-sm"
+                          >
+                            <option value="SICAK">Sıcak</option>
+                            <option value="SOGUK">Soğuk</option>
+                          </select>
+                        </label>
+
+                        <label className="text-xs text-slate-600">
+                          <span className="mb-1 block">3. seçenek - Süt tipi</span>
+                          <select
+                            value={item.drinkCustomization.milkType}
+                            onChange={(event) =>
+                              changeDrinkCustomization(item.productId, "milkType", event.target.value as MilkType)
+                            }
+                            className="h-9 w-full rounded-lg border border-slate-300 px-2 text-sm"
+                          >
+                            <option value="NORMAL_SUT">Normal süt</option>
+                            <option value="LAKTOZSUZ_SUT">Laktozsuz süt</option>
+                            <option value="BADEM_SUTU">Badem sütü (+{DRINK_PLANT_BASED_MILK_EXTRA} TL)</option>
+                            <option value="YULAF_SUTU">Yulaf sütü (+{DRINK_PLANT_BASED_MILK_EXTRA} TL)</option>
+                            <option value="SUTSUZ">Sütsüz</option>
+                          </select>
+                        </label>
+
+                        <label className="text-xs text-slate-600">
+                          <span className="mb-1 block">4. seçenek - Krema</span>
+                          <select
+                            value={item.drinkCustomization.cream}
+                            onChange={(event) =>
+                              changeDrinkCustomization(
+                                item.productId,
+                                "cream",
+                                event.target.value as CreamPreference,
+                              )
+                            }
+                            className="h-9 w-full rounded-lg border border-slate-300 px-2 text-sm"
+                          >
+                            <option value="KREMA_OLSUN">Krema olsun</option>
+                            <option value="KREMA_OLMASIN">Krema olmasın</option>
+                          </select>
+                        </label>
+
+                        <label className="text-xs text-slate-600 sm:col-span-2">
+                          <span className="mb-1 block">5. seçenek - Ekstralar</span>
+                          <select
+                            value={item.drinkCustomization.extra}
+                            onChange={(event) =>
+                              changeDrinkCustomization(item.productId, "extra", event.target.value as DrinkExtra)
+                            }
+                            className="h-9 w-full rounded-lg border border-slate-300 px-2 text-sm"
+                          >
+                            <option value="EKSTRA_BUZLU">Ekstra buzlu</option>
+                            <option value="EKSTRA_SUTLU">Ekstra sütlü</option>
+                          </select>
+                        </label>
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {item.category === "FOOD" && item.foodCustomization ? (
+                    <div className="mt-3 space-y-2 rounded-lg border border-slate-200 bg-white p-3">
+                      <p className="text-xs font-semibold text-slate-600">Servis tipi</p>
+                      <select
+                        value={item.foodCustomization.serviceType}
+                        onChange={(event) =>
+                          changeFoodCustomization(item.productId, event.target.value as FoodServiceType)
+                        }
+                        className="h-9 w-full rounded-lg border border-slate-300 px-2 text-sm"
+                      >
+                        <option value="SICAK">Sıcak</option>
+                        <option value="SOGUK">Soğuk</option>
+                      </select>
+                    </div>
+                  ) : null}
+                </article>
+              );
+            })
           )}
         </div>
 
         <div className="mt-4 space-y-4 border-t border-slate-200 pt-4">
           <div>
-            <p className="mb-2 text-sm font-medium">Ödeme Tipi</p>
-            <div className="grid grid-cols-2 gap-2 rounded-xl border border-slate-200 bg-slate-50 p-1 sm:grid-cols-4">
+            {/* Item-level payment toggle */}
+            <label className="mb-3 flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+              <input
+                type="checkbox"
+                checked={isItemLevelPayment}
+                onChange={(e) => toggleItemLevelPayment(e.target.checked)}
+                className="h-4 w-4 rounded accent-blue-600"
+              />
+              <span className="text-sm font-medium text-slate-700">Ürün bazlı ödeme</span>
+              <span className="text-xs text-slate-500">(ürünleri farklı yöntemlerle öde)</span>
+            </label>
+
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-sm font-medium">Ödeme</p>
+              {!isItemLevelPayment ? (
+                <button
+                  type="button"
+                  onClick={addPaymentEntry}
+                  className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 transition hover:border-slate-400"
+                >
+                  + Ödeme Ekle
+                </button>
+              ) : null}
+            </div>
+
+            {/* Quick full-amount buttons */}
+            <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
               {paymentOptions.map((option) => (
                 <button
                   key={option.value}
                   type="button"
-                  onClick={() => setPaymentMethod(option.value)}
-                  className={`h-9 rounded-lg text-sm transition ${paymentMethod === option.value
-                    ? "bg-[var(--primary)] font-semibold text-white"
-                    : "bg-transparent text-slate-700"
-                    }`}
+                  onClick={() => setFullAmountPayment(option.value)}
+                  className="h-9 rounded-lg border border-slate-200 bg-slate-50 text-xs font-medium text-slate-700 transition hover:border-slate-400"
                 >
                   {option.label}
                 </button>
               ))}
             </div>
+
+            {/* Item-level assignment controls */}
+            {isItemLevelPayment ? (
+              <div className="space-y-3">
+                {/* Assign selected items */}
+                {selectedItemIndices.size > 0 ? (
+                  <div className="flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 p-2">
+                    <span className="text-xs font-medium text-blue-700">
+                      {selectedItemIndices.size} ürün seçili
+                    </span>
+                    <select
+                      value={itemAssignMethod}
+                      onChange={(e) => setItemAssignMethod(e.target.value as PaymentMethod)}
+                      className="h-8 flex-1 rounded-lg border border-blue-300 px-2 text-sm"
+                    >
+                      {paymentOptions.map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={assignSelectedItems}
+                      className="h-8 rounded-lg bg-blue-600 px-3 text-xs font-semibold text-white transition hover:bg-blue-700"
+                    >
+                      Seçilenleri Ata →
+                    </button>
+                  </div>
+                ) : null}
+
+                {/* Payment groups */}
+                <div className="space-y-2">
+                  {payments.filter((p) => p.itemIndices && p.itemIndices.length > 0).map((entry) => (
+                    <div key={entry.id} className="rounded-lg border border-green-200 bg-green-50 p-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex h-5 items-center rounded bg-green-600 px-1.5 text-[10px] font-bold text-white">
+                            {paymentOptions.find((o) => o.value === entry.paymentMethod)?.label}
+                          </span>
+                          <span className="text-sm font-semibold text-green-800">
+                            {formatCurrencyTRY(entry.amount)}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeItemLevelPayment(entry.id)}
+                          className="h-6 w-6 rounded border border-red-200 bg-red-50 text-xs font-bold text-red-600"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      <p className="mt-1 text-xs text-green-700">
+                        {entry.itemIndices?.map((idx) => {
+                          const ci = cart[idx];
+                          return ci ? `${ci.qty}× ${ci.name}` : null;
+                        }).filter(Boolean).join(", ")}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Unassigned items warning */}
+                {itemLevelMismatch ? (
+                  <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                    {unassignedItemIndices.length} ürün henüz bir ödeme yöntemine atanmadı:
+                    {" "}{unassignedItemIndices.map((i) => cart[i]?.name).filter(Boolean).join(", ")}
+                  </p>
+                ) : null}
+              </div>
+            ) : (
+              /* Order-level split payment UI (existing) */
+              <>
+                <div className="space-y-2">
+                  {payments.map((entry, index) => (
+                    <div key={entry.id} className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 p-2">
+                      <span className="text-xs font-semibold text-slate-500 w-5">{index + 1}.</span>
+                      <select
+                        value={entry.paymentMethod}
+                        onChange={(e) => updatePaymentEntry(entry.id, "paymentMethod", e.target.value)}
+                        className="h-9 flex-1 rounded-lg border border-slate-300 px-2 text-sm"
+                      >
+                        {paymentOptions.map((opt) => (
+                          <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                      </select>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={entry.amount || ""}
+                        onChange={(e) => updatePaymentEntry(entry.id, "amount", e.target.value)}
+                        placeholder="Tutar"
+                        className="h-9 w-28 rounded-lg border border-slate-300 px-2 text-sm text-right"
+                      />
+                      <span className="text-xs text-slate-500">₺</span>
+                      {payments.length > 1 ? (
+                        <button
+                          type="button"
+                          onClick={() => removePaymentEntry(entry.id)}
+                          className="h-8 w-8 rounded-lg border border-red-200 bg-red-50 text-xs font-bold text-red-600"
+                        >
+                          ✕
+                        </button>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+
+                {paymentMismatch ? (
+                  <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                    Ödeme toplamı = {formatCurrencyTRY(paymentTotal)}, kalan tutar = {formatCurrencyTRY(Math.max(totalAmount - paymentTotal, 0))}
+                  </p>
+                ) : null}
+              </>
+            )}
           </div>
 
           <label className="flex flex-col gap-2">
@@ -614,7 +1022,7 @@ export function OrderCreateForm({ products }: { products: ProductRow[] }) {
           </label>
 
           <input type="hidden" name="itemsJson" value={serializedItems} />
-          <input type="hidden" name="paymentMethod" value={paymentMethod} />
+          <input type="hidden" name="paymentsJson" value={serializedPayments} />
 
           {localError ? (
             <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{localError}</p>

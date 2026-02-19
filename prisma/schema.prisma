@@ -43,7 +43,7 @@ model Order {
   id            String          @id @default(uuid())
   orderNo       String          @unique
   status        OrderStatus     @default(OPEN)
-  paymentMethod PaymentMethod
+  paymentMethod PaymentMethod?
   totalAmount   Decimal         @default(0)
   note          String?
   createdAt     DateTime        @default(now())
@@ -52,6 +52,7 @@ model Order {
   createdById   String
   createdBy     User            @relation(fields: [createdById], references: [id])
   items         OrderItem[]
+  payments      OrderPayment[]
   movements     StockMovement[]
 
   @@index([status])
@@ -59,20 +60,36 @@ model Order {
 }
 
 model OrderItem {
-  id                  String   @id @default(uuid())
+  id                  String        @id @default(uuid())
   orderId             String
   productId           String
+  orderPaymentId      String?
   productNameSnapshot String
   unitPriceSnapshot   Decimal
-  qty                 Int      @default(1)
+  qty                 Int           @default(1)
   modifierText        String?
   lineTotal           Decimal
-  createdAt           DateTime @default(now())
-  order               Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product             Product  @relation(fields: [productId], references: [id])
+  createdAt           DateTime      @default(now())
+  order               Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product             Product       @relation(fields: [productId], references: [id])
+  payment             OrderPayment? @relation(fields: [orderPaymentId], references: [id], onDelete: SetNull)
 
   @@index([orderId])
   @@index([productId])
+  @@index([orderPaymentId])
+}
+
+model OrderPayment {
+  id            String        @id @default(uuid())
+  orderId       String
+  paymentMethod PaymentMethod
+  amount        Decimal
+  note          String?
+  createdAt     DateTime      @default(now())
+  order         Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  items         OrderItem[]
+
+  @@index([orderId])
 }
 
 model StockMovement {
