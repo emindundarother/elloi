@@ -180,4 +180,5 @@ enum StockMovementType {
   ADJUSTMENT
   RESTOCK
   CANCEL_REVERT
+  ORDER_EDIT_REVERT
 }

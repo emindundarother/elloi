@@ -117,21 +117,34 @@ export default async function DashboardPage() {
                             ? order.payments
                               .map((p) => `${PAYMENT_METHOD_LABELS[p.paymentMethod]}: ${formatCurrencyTRY(p.amount)}`)
                               .join(", ")
-                            : order.paymentMethod
-                              ? PAYMENT_METHOD_LABELS[order.paymentMethod]
-                              : "-"}
+                            : <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">Ödeme Bekliyor</span>}
                         </td>
                         <td className="px-4 py-3 font-medium">{formatCurrencyTRY(order.totalAmount)}</td>
                         <td className="px-4 py-3">
                           <div className="flex gap-2">
-                            <form action={deliverOrderAction.bind(null, order.id)}>
-                              <button
-                                type="submit"
-                                className="h-9 rounded-lg bg-[var(--primary)] px-3 text-xs font-semibold text-white"
+                            {order.payments.length > 0 ? (
+                              <form action={deliverOrderAction.bind(null, order.id)}>
+                                <button
+                                  type="submit"
+                                  className="h-9 rounded-lg bg-[var(--primary)] px-3 text-xs font-semibold text-white"
+                                >
+                                  Teslim Et
+                                </button>
+                              </form>
+                            ) : (
+                              <Link
+                                href={`/order/pay/${order.id}`}
+                                className="flex h-9 items-center rounded-lg bg-amber-500 px-3 text-xs font-semibold text-white transition hover:bg-amber-600"
                               >
-                                Teslim Et
-                              </button>
-                            </form>
+                                Ödeme Yap
+                              </Link>
+                            )}
+                            <Link
+                              href={`/order/edit/${order.id}`}
+                              className="flex h-9 items-center rounded-lg border border-blue-300 bg-blue-50 px-3 text-xs font-semibold text-blue-700 transition hover:border-blue-400 hover:bg-blue-100"
+                            >
+                              Düzenle
+                            </Link>
                             {canManage ? (
                               <form action={cancelOrderAction.bind(null, order.id)}>
                                 <button

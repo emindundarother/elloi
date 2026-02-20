@@ -32,6 +32,7 @@ type CreateOrderInput = {
   note?: string;
   items: CreateOrderItemInput[];
   createdById: string;
+  isPayLater?: boolean;
 };
 
 export class StockError extends Error {
@@ -193,55 +194,54 @@ async function createOrderTxn(
     },
   });
 
-  // --- Step 2: create payments & link items ---
-  for (const p of input.payments) {
-    let paymentAmount: Prisma.Decimal;
+  // --- Step 2 & 3: create payments & validate (skip if pay-later) ---
+  if (!input.isPayLater) {
+    for (const p of input.payments) {
+      let paymentAmount: Prisma.Decimal;
 
-    if (isItemLevel && p.itemIndices && p.itemIndices.length > 0) {
-      // Item-level: amount is the sum of linked items' lineTotals
-      paymentAmount = p.itemIndices.reduce(
-        (sum, idx) => sum.add(order.items[idx]?.lineTotal ?? new Prisma.Decimal(0)),
-        new Prisma.Decimal(0),
-      );
-    } else {
-      paymentAmount = new Prisma.Decimal(p.amount.toFixed(2));
-    }
+      if (isItemLevel && p.itemIndices && p.itemIndices.length > 0) {
+        paymentAmount = p.itemIndices.reduce(
+          (sum, idx) => sum.add(order.items[idx]?.lineTotal ?? new Prisma.Decimal(0)),
+          new Prisma.Decimal(0),
+        );
+      } else {
+        paymentAmount = new Prisma.Decimal(p.amount.toFixed(2));
+      }
 
-    const payment = await tx.orderPayment.create({
-      data: {
-        orderId: order.id,
-        paymentMethod: p.paymentMethod,
-        amount: paymentAmount,
-        note: cleanModifier(p.note),
-      },
-    });
+      const payment = await tx.orderPayment.create({
+        data: {
+          orderId: order.id,
+          paymentMethod: p.paymentMethod,
+          amount: paymentAmount,
+          note: cleanModifier(p.note),
+        },
+      });
 
-    // Link items to their payment
-    if (isItemLevel && p.itemIndices && p.itemIndices.length > 0) {
-      const itemIds = p.itemIndices.map((idx) => order.items[idx]?.id).filter(Boolean) as string[];
-      if (itemIds.length > 0) {
-        await tx.orderItem.updateMany({
-          where: { id: { in: itemIds } },
-          data: { orderPaymentId: payment.id },
-        });
+      if (isItemLevel && p.itemIndices && p.itemIndices.length > 0) {
+        const itemIds = p.itemIndices.map((idx) => order.items[idx]?.id).filter(Boolean) as string[];
+        if (itemIds.length > 0) {
+          await tx.orderItem.updateMany({
+            where: { id: { in: itemIds } },
+            data: { orderPaymentId: payment.id },
+          });
+        }
       }
     }
-  }
 
-  // --- Step 3: validate payment total matches order total ---
-  const createdPayments = await tx.orderPayment.findMany({
-    where: { orderId: order.id },
-    select: { amount: true },
-  });
-  const paymentSumDecimal = createdPayments.reduce(
-    (sum, pp) => sum.add(pp.amount),
-    new Prisma.Decimal(0),
-  );
-
-  if (!paymentSumDecimal.equals(totalAmount)) {
-    throw new Error(
-      `Ödeme toplamı (${paymentSumDecimal}) sipariş toplamıyla (${totalAmount}) eşleşmiyor.`,
+    const createdPayments = await tx.orderPayment.findMany({
+      where: { orderId: order.id },
+      select: { amount: true },
+    });
+    const paymentSumDecimal = createdPayments.reduce(
+      (sum, pp) => sum.add(pp.amount),
+      new Prisma.Decimal(0),
     );
+
+    if (!paymentSumDecimal.equals(totalAmount)) {
+      throw new Error(
+        `Ödeme toplamı (${paymentSumDecimal}) sipariş toplamıyla (${totalAmount}) eşleşmiyor.`,
+      );
+    }
   }
 
   for (const [productId, qty] of stockNeeds.entries()) {
@@ -279,6 +279,12 @@ export async function createOrder(input: CreateOrderInput): Promise<{ id: string
 }
 
 export async function deliverOrder(orderId: string): Promise<void> {
+  const paymentCount = await prisma.orderPayment.count({ where: { orderId } });
+
+  if (paymentCount === 0) {
+    throw new Error("Ödeme yapılmadan sipariş teslim edilemez. Lütfen önce ödeme alınız.");
+  }
+
   const updated = await prisma.order.updateMany({
     where: {
       id: orderId,
@@ -293,6 +299,73 @@ export async function deliverOrder(orderId: string): Promise<void> {
   if (updated.count === 0) {
     throw new Error("Sipariş teslim edilemedi. Durumu değişmiş olabilir.");
   }
+}
+
+export async function completeOrderPayment(
+  orderId: string,
+  payments: PaymentEntryInput[],
+): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    const order = await tx.order.findUnique({
+      where: { id: orderId },
+      include: {
+        items: { orderBy: { createdAt: "asc" }, select: { id: true, lineTotal: true } },
+        payments: { select: { id: true } },
+      },
+    });
+
+    if (!order) throw new Error("Sipariş bulunamadı.");
+    if (order.status !== OrderStatus.OPEN) throw new Error("Sadece açık siparişler ödenebilir.");
+    if (order.payments.length > 0) throw new Error("Bu sipariş zaten ödenmiş.");
+
+    const isItemLevel = payments.some((p) => p.itemIndices && p.itemIndices.length > 0);
+
+    for (const p of payments) {
+      let paymentAmount: Prisma.Decimal;
+
+      if (isItemLevel && p.itemIndices && p.itemIndices.length > 0) {
+        paymentAmount = p.itemIndices.reduce(
+          (sum, idx) => sum.add(order.items[idx]?.lineTotal ?? new Prisma.Decimal(0)),
+          new Prisma.Decimal(0),
+        );
+      } else {
+        paymentAmount = new Prisma.Decimal(p.amount.toFixed(2));
+      }
+
+      const payment = await tx.orderPayment.create({
+        data: {
+          orderId: order.id,
+          paymentMethod: p.paymentMethod,
+          amount: paymentAmount,
+        },
+      });
+
+      if (isItemLevel && p.itemIndices && p.itemIndices.length > 0) {
+        const itemIds = p.itemIndices.map((idx) => order.items[idx]?.id).filter(Boolean) as string[];
+        if (itemIds.length > 0) {
+          await tx.orderItem.updateMany({
+            where: { id: { in: itemIds } },
+            data: { orderPaymentId: payment.id },
+          });
+        }
+      }
+    }
+
+    const createdPayments = await tx.orderPayment.findMany({
+      where: { orderId: order.id },
+      select: { amount: true },
+    });
+    const paymentSumDecimal = createdPayments.reduce(
+      (sum, pp) => sum.add(pp.amount),
+      new Prisma.Decimal(0),
+    );
+
+    if (!paymentSumDecimal.equals(order.totalAmount)) {
+      throw new Error(
+        `Ödeme toplamı (${paymentSumDecimal}) sipariş toplamıyla (${order.totalAmount}) eşleşmiyor.`,
+      );
+    }
+  });
 }
 
 export async function cancelOrder(orderId: string, userId: string): Promise<void> {
@@ -362,6 +435,209 @@ export async function cancelOrder(orderId: string, userId: string): Promise<void
   });
 }
 
+export async function updateOrder(
+  orderId: string,
+  input: Omit<CreateOrderInput, "createdById">,
+): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    // --- 1. Load existing order ---
+    const order = await tx.order.findUnique({
+      where: { id: orderId },
+      include: {
+        items: { select: { id: true, productId: true, qty: true } },
+        payments: { select: { id: true } },
+      },
+    });
+
+    if (!order) throw new Error("Sipariş bulunamadı.");
+    if (order.status !== OrderStatus.OPEN) throw new Error("Sadece açık siparişler düzenlenebilir.");
+
+    // --- 2. Revert old stock ---
+    const oldStockNeeds = new Map<string, number>();
+    for (const item of order.items) {
+      const product = await tx.product.findUnique({
+        where: { id: item.productId },
+        select: { trackStock: true },
+      });
+      if (product?.trackStock) {
+        oldStockNeeds.set(item.productId, (oldStockNeeds.get(item.productId) ?? 0) + item.qty);
+      }
+    }
+
+    for (const [productId, qty] of oldStockNeeds.entries()) {
+      await tx.product.update({
+        where: { id: productId },
+        data: { stockQty: { increment: qty } },
+      });
+
+      await tx.stockMovement.create({
+        data: {
+          productId,
+          type: StockMovementType.ORDER_EDIT_REVERT,
+          qtyDelta: qty,
+          orderId: order.id,
+          reason: "Sipariş düzenleme stok iadesi",
+          createdById: order.createdById,
+        },
+      });
+    }
+
+    // --- 3. Delete old payments and items ---
+    await tx.orderPayment.deleteMany({ where: { orderId: order.id } });
+    await tx.orderItem.deleteMany({ where: { orderId: order.id } });
+
+    // --- 4. Build new items ---
+    const requestedProductIds = Array.from(new Set(input.items.map((item) => item.productId)));
+    const products = await tx.product.findMany({
+      where: { id: { in: requestedProductIds }, isActive: true },
+    });
+
+    if (products.length !== requestedProductIds.length) {
+      throw new Error("Bazı ürünler artık aktif değil. Lütfen siparişi yenileyin.");
+    }
+
+    const productMap = new Map(products.map((product) => [product.id, product]));
+    const newStockNeeds = new Map<string, number>();
+    const itemRows: Array<{
+      productId: string;
+      productNameSnapshot: string;
+      unitPriceSnapshot: Prisma.Decimal;
+      qty: number;
+      modifierText: string | null;
+      lineTotal: Prisma.Decimal;
+    }> = [];
+
+    let totalAmount = new Prisma.Decimal(0);
+
+    for (const item of input.items) {
+      const product = productMap.get(item.productId);
+      if (!product) throw new Error("Ürün bulunamadı.");
+      if (item.qty <= 0) throw new Error("Adet en az 1 olmalı.");
+
+      const unitPrice = calculateUnitPrice(product, item);
+      const lineTotal = unitPrice.mul(item.qty);
+      totalAmount = totalAmount.plus(lineTotal);
+
+      itemRows.push({
+        productId: item.productId,
+        productNameSnapshot: product.name,
+        unitPriceSnapshot: unitPrice,
+        qty: item.qty,
+        modifierText: cleanModifier(item.modifierText),
+        lineTotal,
+      });
+
+      if (product.trackStock) {
+        newStockNeeds.set(product.id, (newStockNeeds.get(product.id) ?? 0) + item.qty);
+      }
+    }
+
+    // --- 5. Apply new stock ---
+    for (const [productId, qty] of newStockNeeds.entries()) {
+      const updated = await tx.product.updateMany({
+        where: { id: productId, trackStock: true, stockQty: { gte: qty } },
+        data: { stockQty: { decrement: qty } },
+      });
+
+      if (updated.count === 0) {
+        const latest = await tx.product.findUnique({
+          where: { id: productId },
+          select: { name: true, stockQty: true },
+        });
+        throw new StockError(
+          `${latest?.name ?? "Ürün"} için stok yetersiz. Mevcut: ${latest?.stockQty ?? 0}`,
+        );
+      }
+    }
+
+    // --- 6. Create new items ---
+    await tx.orderItem.createMany({
+      data: itemRows.map((row) => ({ ...row, orderId: order.id })),
+    });
+
+    // Reload items to get IDs for payment linking
+    const newItems = await tx.orderItem.findMany({
+      where: { orderId: order.id },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, lineTotal: true },
+    });
+
+    // --- 7. Create new payments (skip if pay-later) ---
+    if (!input.isPayLater) {
+      const isItemLevel = input.payments.some((p) => p.itemIndices && p.itemIndices.length > 0);
+
+      for (const p of input.payments) {
+        let paymentAmount: Prisma.Decimal;
+
+        if (isItemLevel && p.itemIndices && p.itemIndices.length > 0) {
+          paymentAmount = p.itemIndices.reduce(
+            (sum, idx) => sum.add(newItems[idx]?.lineTotal ?? new Prisma.Decimal(0)),
+            new Prisma.Decimal(0),
+          );
+        } else {
+          paymentAmount = new Prisma.Decimal(p.amount.toFixed(2));
+        }
+
+        const payment = await tx.orderPayment.create({
+          data: {
+            orderId: order.id,
+            paymentMethod: p.paymentMethod,
+            amount: paymentAmount,
+            note: cleanModifier(p.note),
+          },
+        });
+
+        if (isItemLevel && p.itemIndices && p.itemIndices.length > 0) {
+          const itemIds = p.itemIndices.map((idx) => newItems[idx]?.id).filter(Boolean) as string[];
+          if (itemIds.length > 0) {
+            await tx.orderItem.updateMany({
+              where: { id: { in: itemIds } },
+              data: { orderPaymentId: payment.id },
+            });
+          }
+        }
+      }
+
+      const createdPayments = await tx.orderPayment.findMany({
+        where: { orderId: order.id },
+        select: { amount: true },
+      });
+      const paymentSumDecimal = createdPayments.reduce(
+        (sum, pp) => sum.add(pp.amount),
+        new Prisma.Decimal(0),
+      );
+
+      if (!paymentSumDecimal.equals(totalAmount)) {
+        throw new Error(
+          `Ödeme toplamı (${paymentSumDecimal}) sipariş toplamıyla (${totalAmount}) eşleşmiyor.`,
+        );
+      }
+    }
+
+    // --- 8. New stock movements ---
+    for (const [productId, qty] of newStockNeeds.entries()) {
+      await tx.stockMovement.create({
+        data: {
+          productId,
+          type: StockMovementType.SALE,
+          qtyDelta: -qty,
+          orderId: order.id,
+          createdById: order.createdById,
+        },
+      });
+    }
+
+    // --- 9. Update order totals ---
+    await tx.order.update({
+      where: { id: order.id },
+      data: {
+        totalAmount,
+        note: cleanModifier(input.note),
+      },
+    });
+  });
+}
+
 export async function listOpenOrders() {
   return prisma.order.findMany({
     where: { status: OrderStatus.OPEN },
@@ -388,3 +664,4 @@ export async function listOpenOrders() {
     },
   });
 }
+

@@ -29,8 +29,33 @@ const paymentEntrySchema = z.object({
 export const createOrderSchema = z.object({
   note: z.string().trim().max(120).optional().or(z.literal("")),
   items: z.array(orderItemSchema).min(1, "Sepet boş olamaz."),
+  payments: z.array(paymentEntrySchema),
+  isPayLater: z.preprocess(
+    (v) => v === "true" || v === true,
+    z.boolean().default(false),
+  ),
+}).refine(
+  (data) => data.isPayLater || data.payments.length >= 1,
+  { message: "En az bir ödeme yöntemi seçilmeli.", path: ["payments"] },
+);
+
+export const completePaymentSchema = z.object({
   payments: z.array(paymentEntrySchema).min(1, "En az bir ödeme yöntemi seçilmeli."),
 });
+
+export const updateOrderSchema = z.object({
+  orderId: z.string().uuid("Geçersiz sipariş kimliği."),
+  note: z.string().trim().max(120).optional().or(z.literal("")),
+  items: z.array(orderItemSchema).min(1, "Sepet boş olamaz."),
+  payments: z.array(paymentEntrySchema),
+  isPayLater: z.preprocess(
+    (v) => v === "true" || v === true,
+    z.boolean().default(false),
+  ),
+}).refine(
+  (data) => data.isPayLater || data.payments.length >= 1,
+  { message: "En az bir ödeme yöntemi seçilmeli.", path: ["payments"] },
+);
 
 const productCategorySchema = z.enum(["FOOD", "DRINK", "EXTRAS"], {
   error: "Ürün kategorisi geçersiz.",
