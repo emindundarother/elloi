@@ -4,8 +4,10 @@ export const PRODUCT_SUBCATEGORY_ORDER = [
   "HOT_COFFEES",
   "COLD_COFFEES",
   "OTHER_HOT_DRINKS",
+  "HOT_MATCHA",
   "TEAS",
   "COLD_TEAS",
+  "COLD_MATCHA",
   "SOFT_DRINKS",
   "SAVORIES",
   "DESSERTS",
@@ -22,8 +24,10 @@ export const PRODUCT_SUBCATEGORY_LABELS: Record<ProductSubCategory, string> = {
   HOT_COFFEES: "Sıcak Kahveler",
   COLD_COFFEES: "Soğuk Kahveler",
   OTHER_HOT_DRINKS: "Diğer Sıcak İçecekler",
+  HOT_MATCHA: "Sıcak Matcha",
   TEAS: "Çaylar",
   COLD_TEAS: "Soğuk Çaylar",
+  COLD_MATCHA: "Soğuk Matcha",
   SOFT_DRINKS: "Soft İçecekler",
   SAVORIES: "Sandviçler / Tuzlular",
   DESSERTS: "Tatlılar",
@@ -33,7 +37,7 @@ export const PRODUCT_SUBCATEGORY_LABELS: Record<ProductSubCategory, string> = {
 };
 
 export const PRODUCT_SUBCATEGORY_BY_CATEGORY: Record<ProductCategoryLike, ProductSubCategory[]> = {
-  DRINK: ["HOT_COFFEES", "COLD_COFFEES", "OTHER_HOT_DRINKS", "TEAS", "COLD_TEAS", "SOFT_DRINKS", "OTHER_DRINKS"],
+  DRINK: ["HOT_COFFEES", "COLD_COFFEES", "OTHER_HOT_DRINKS", "HOT_MATCHA", "TEAS", "COLD_TEAS", "COLD_MATCHA", "SOFT_DRINKS", "OTHER_DRINKS"],
   FOOD: ["SAVORIES", "DESSERTS", "OTHER_FOOD"],
   EXTRAS: ["EXTRAS"],
 };
